@@ -5,27 +5,27 @@
         Width="420" SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
-        Background="#1B1B2F">
+        Background="#1D1E20">
 
     <Window.Resources>
-        <!-- ── Accent Colors ── -->
-        <Color x:Key="AccentColor">#E04080</Color>
-        <Color x:Key="AccentHoverColor">#F06098</Color>
+        <!--  Accent Colors  -->
+        <Color x:Key="AccentColor">#D50056</Color>
+        <Color x:Key="AccentHoverColor">#D50056</Color>
         <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
-        <SolidColorBrush x:Key="CardBrush" Color="#252540"/>
-        <SolidColorBrush x:Key="CardBorderBrush" Color="#353555"/>
-        <SolidColorBrush x:Key="TextBrush" Color="#E0E0E0"/>
-        <SolidColorBrush x:Key="DimTextBrush" Color="#9090A8"/>
+        <SolidColorBrush x:Key="CardBrush" Color="Transparent"/>
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#433E46"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#F1ECF3"/>
+        <SolidColorBrush x:Key="DimTextBrush" Color="#F1ECF3"/>
         <SolidColorBrush x:Key="ValueBrush" Color="#F0C050"/>
         <SolidColorBrush x:Key="BottomBarBrush" Color="#151528"/>
 
-        <!-- ── ComboBox Style ── -->
+        <!--  ComboBox Style  -->
         <Style x:Key="DarkComboBox" TargetType="ComboBox">
-            <Setter Property="Background" Value="#2E2E48"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Padding" Value="10,5"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -35,7 +35,7 @@
                                     Background="{TemplateBinding Background}"
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="8">
+                                    CornerRadius="4">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition/>
@@ -63,8 +63,8 @@
                             </Border>
                             <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
                                    AllowsTransparency="True" PopupAnimation="Slide">
-                                <Border Background="#2E2E48" BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="1" CornerRadius="8" Margin="0,4,0,0"
+                                <Border Background="#1D1E20" BorderBrush="{StaticResource CardBorderBrush}"
+                                        BorderThickness="1" CornerRadius="4" Margin="0,4,0,0"
                                         MaxHeight="{TemplateBinding MaxDropDownHeight}">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <StackPanel IsItemsHost="True"/>
@@ -93,10 +93,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="#3A3A5A"/>
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource CardBorderBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="#40305A"/>
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource AccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -104,20 +104,20 @@
             </Setter>
         </Style>
 
-        <!-- ── Slider Style ── -->
+        <!--  Slider Style  -->
         <Style x:Key="DarkSlider" TargetType="Slider">
             <Setter Property="Height" Value="24"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid VerticalAlignment="Center">
-                            <Border Height="4" CornerRadius="2" Background="#3A3A55" VerticalAlignment="Center"/>
+                            <Border Height="3" CornerRadius="2" Background="#2F2F31" VerticalAlignment="Center"/>
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="Slider.DecreaseLarge">
                                         <RepeatButton.Template>
                                             <ControlTemplate TargetType="RepeatButton">
-                                                <Border Height="4" CornerRadius="2" Background="{StaticResource AccentBrush}"/>
+                                                <Border Height="2" CornerRadius="2" Background="{StaticResource AccentBrush}"/>
                                             </ControlTemplate>
                                         </RepeatButton.Template>
                                     </RepeatButton>
@@ -135,7 +135,7 @@
                                     <Thumb>
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
-                                                <Ellipse x:Name="ThumbDot" Width="16" Height="16" Fill="{StaticResource AccentBrush}"
+                                                <Ellipse x:Name="ThumbDot" Width="12" Height="12" Fill="{StaticResource TextBrush}"
                                                          Effect="{x:Null}"/>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
@@ -154,7 +154,7 @@
             </Setter>
         </Style>
 
-        <!-- ── Button Style ── -->
+        <!--  Button Style  -->
         <Style x:Key="StartStopButton" TargetType="Button">
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -164,7 +164,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Bg" Background="{TemplateBinding Background}"
-                                CornerRadius="8" Padding="24,8">
+                                CornerRadius="4" Padding="24,8">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -183,19 +183,19 @@
 
     <StackPanel Margin="0">
 
-        <!-- ══════════════ PRIMARY AUDIO OUTPUT ══════════════ -->
-        <Border Background="{StaticResource CardBrush}" CornerRadius="12"
+        <!-- PRIMARY AUDIO OUTPUT -->
+        <Border Background="{StaticResource CardBrush}" CornerRadius="4"
                 BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
-                Margin="14,14,14,0" Padding="18,14">
+                Margin="14,14,14,0" Padding="10">
             <StackPanel>
                 <TextBlock Text="Primary Audio Output" FontSize="15" FontWeight="Bold"
-                           Foreground="{StaticResource AccentBrush}" Margin="0,0,0,10"/>
+                           Foreground="{StaticResource TextBrush}" Margin="0,0,0,10"/>
 
                 <TextBlock Text="Device" Foreground="{StaticResource DimTextBrush}" FontSize="12" Margin="0,0,0,4"/>
                 <ComboBox x:Name="ComboPrimaryDevice" Style="{StaticResource DarkComboBox}"
                           ItemContainerStyle="{StaticResource DarkComboBoxItem}"/>
 
-                <Grid Margin="0,14,0,0">
+                <Grid Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition/>
                         <ColumnDefinition Width="Auto"/>
@@ -206,9 +206,9 @@
                 </Grid>
                 <Slider x:Name="SliderPrimaryLatency" Style="{StaticResource DarkSlider}"
                         Minimum="0" Maximum="5000" Value="0"
-                        TickFrequency="100" IsSnapToTickEnabled="False" Margin="0,4,0,0"/>
+                        TickFrequency="100" IsSnapToTickEnabled="False"/>
 
-                <Grid Margin="0,12,0,0">
+                <Grid Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition/>
                         <ColumnDefinition Width="Auto"/>
@@ -219,23 +219,23 @@
                 </Grid>
                 <Slider x:Name="SliderPrimaryVolume" Style="{StaticResource DarkSlider}"
                         Minimum="0" Maximum="100" Value="100"
-                        TickFrequency="1" IsSnapToTickEnabled="False" Margin="0,4,0,0"/>
+                        TickFrequency="1" IsSnapToTickEnabled="False" />
             </StackPanel>
         </Border>
 
-        <!-- ══════════════ SUBWOOFER AUDIO OUTPUT ══════════════ -->
-        <Border Background="{StaticResource CardBrush}" CornerRadius="12"
+        <!-- SUBWOOFER AUDIO OUTPUT -->
+        <Border Background="{StaticResource CardBrush}" CornerRadius="4"
                 BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
-                Margin="14,10,14,0" Padding="18,14">
+                Margin="14,10,14,0" Padding="10">
             <StackPanel>
                 <TextBlock Text="Subwoofer Audio Output" FontSize="15" FontWeight="Bold"
-                           Foreground="{StaticResource AccentBrush}" Margin="0,0,0,10"/>
+                           Foreground="{StaticResource TextBrush}" Margin="0,0,0,10"/>
 
                 <TextBlock Text="Device" Foreground="{StaticResource DimTextBrush}" FontSize="12" Margin="0,0,0,4"/>
                 <ComboBox x:Name="ComboSubDevice" Style="{StaticResource DarkComboBox}"
                           ItemContainerStyle="{StaticResource DarkComboBoxItem}"/>
 
-                <Grid Margin="0,14,0,0">
+                <Grid Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition/>
                         <ColumnDefinition Width="Auto"/>
@@ -246,9 +246,9 @@
                 </Grid>
                 <Slider x:Name="SliderSubLatency" Style="{StaticResource DarkSlider}"
                         Minimum="0" Maximum="5000" Value="0"
-                        TickFrequency="100" IsSnapToTickEnabled="False" Margin="0,4,0,0"/>
+                        TickFrequency="100" IsSnapToTickEnabled="False" />
 
-                <Grid Margin="0,12,0,0">
+                <Grid Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition/>
                         <ColumnDefinition Width="Auto"/>
@@ -259,9 +259,9 @@
                 </Grid>
                 <Slider x:Name="SliderSubVolume" Style="{StaticResource DarkSlider}"
                         Minimum="0" Maximum="100" Value="100"
-                        TickFrequency="1" IsSnapToTickEnabled="False" Margin="0,4,0,0"/>
+                        TickFrequency="1" IsSnapToTickEnabled="False" />
 
-                <Grid Margin="0,12,0,0">
+                <Grid Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition/>
                         <ColumnDefinition Width="Auto"/>
@@ -272,14 +272,12 @@
                 </Grid>
                 <Slider x:Name="SliderLowPass" Style="{StaticResource DarkSlider}"
                         Minimum="10" Maximum="300" Value="120"
-                        TickFrequency="1" IsSnapToTickEnabled="False" Margin="0,4,0,0"/>
+                        TickFrequency="1" IsSnapToTickEnabled="False" />
             </StackPanel>
         </Border>
 
-        <!-- ══════════════ BOTTOM BAR ══════════════ -->
-        <Border Background="{StaticResource BottomBarBrush}" CornerRadius="12"
-                BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
-                Margin="14,10,14,14" Padding="18,10">
+        <!-- BOTTOM BAR -->
+        <Border Margin="14,14" Padding="0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition/>

@@ -247,6 +247,10 @@ public partial class MainWindow : Window
     {
         ComboPrimaryDevice.IsEnabled = enabled;
         ComboSubDevice.IsEnabled = enabled;
+
+        // Reduce opacity when disabled
+        ComboPrimaryDevice.Opacity = enabled ? 1 : 0.4;
+        ComboSubDevice.Opacity = enabled ? 1 : 0.4;
     }
 
     // ── Engine events (come from background thread) ─────────
