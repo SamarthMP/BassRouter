@@ -1,16 +1,25 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using BassRouter.Audio;
 using NAudio.CoreAudioApi;
 
 namespace BassRouter;
 
-public partial class MainForm : Form
+public partial class MainWindow : Window
 {
     private readonly AudioDeviceManager DeviceManager;
     private readonly AudioEngine Engine;
     private List<MMDevice> Devices = new();
     private bool ShouldIgnoreVolumeEvents;
 
-    public MainForm()
+    private static readonly SolidColorBrush StartBrush = new(Color.FromRgb(10, 122, 62));
+    private static readonly SolidColorBrush StopBrush = new(Color.FromRgb(180, 40, 40));
+    private static readonly SolidColorBrush RunningBrush = new(Color.FromRgb(80, 220, 80));
+    private static readonly SolidColorBrush ErrorBrush = new(Color.FromRgb(255, 100, 100));
+    private static readonly SolidColorBrush DimBrush = new(Color.FromRgb(144, 144, 168));
+
+    public MainWindow()
     {
         InitializeComponent();
 
@@ -28,8 +37,8 @@ public partial class MainForm : Form
         Engine.Error += OnEngineError;
         Engine.Stopped += OnEngineStopped;
 
-        ComboPrimaryDevice.SelectedIndexChanged += OnPrimaryDeviceChanged;
-        ComboSubDevice.SelectedIndexChanged += OnSubDeviceChanged;
+        ComboPrimaryDevice.SelectionChanged += OnPrimaryDeviceChanged;
+        ComboSubDevice.SelectionChanged += OnSubDeviceChanged;
 
         SliderPrimaryLatency.ValueChanged += OnPrimaryLatencyChanged;
         SliderPrimaryVolume.ValueChanged += OnPrimaryVolumeChanged;
@@ -40,10 +49,10 @@ public partial class MainForm : Form
 
         ButtonStartStop.Click += OnStartStopClicked;
 
-        FormClosing += OnFormClosing;
+        Closing += OnWindowClosing;
     }
 
-
+    // ── Device list management ──────────────────────────────
 
     private void RefreshDeviceList()
     {
@@ -61,7 +70,6 @@ public partial class MainForm : Form
             ComboSubDevice.Items.Add(device.FriendlyName);
         }
 
-        // Restore previous selection or pick default
         SelectDevice(ComboPrimaryDevice, previousPrimaryId, "Headphones");
         SelectDevice(ComboSubDevice, previousSubId, "Speaker", "Subwoofer");
 
@@ -71,30 +79,19 @@ public partial class MainForm : Form
 
     private void SelectDevice(ComboBox combo, string? previousId, params string[] defaultHints)
     {
-        // Try to re-select the previously selected device
         if (previousId != null)
         {
             int idx = Devices.FindIndex(d => d.ID == previousId);
-            if (idx >= 0)
-            {
-                combo.SelectedIndex = idx;
-                return;
-            }
+            if (idx >= 0) { combo.SelectedIndex = idx; return; }
         }
 
-        // Try default hints
         foreach (string hint in defaultHints)
         {
             int idx = Devices.FindIndex(d =>
                 d.FriendlyName.Contains(hint, StringComparison.OrdinalIgnoreCase));
-            if (idx >= 0)
-            {
-                combo.SelectedIndex = idx;
-                return;
-            }
+            if (idx >= 0) { combo.SelectedIndex = idx; return; }
         }
 
-        // Fall back to first device
         if (combo.Items.Count > 0)
             combo.SelectedIndex = 0;
     }
@@ -102,17 +99,13 @@ public partial class MainForm : Form
     private string? GetSelectedDeviceId(ComboBox combo)
     {
         int idx = combo.SelectedIndex;
-        if (idx >= 0 && idx < Devices.Count)
-            return Devices[idx].ID;
-        return null;
+        return idx >= 0 && idx < Devices.Count ? Devices[idx].ID : null;
     }
 
     private MMDevice? GetSelectedDevice(ComboBox combo)
     {
         int idx = combo.SelectedIndex;
-        if (idx >= 0 && idx < Devices.Count)
-            return Devices[idx];
-        return null;
+        return idx >= 0 && idx < Devices.Count ? Devices[idx] : null;
     }
 
     private void SyncDeviceToEngine()
@@ -130,14 +123,14 @@ public partial class MainForm : Form
             if (hpVol >= 0)
             {
                 SliderPrimaryVolume.Value = (int)(hpVol * 100);
-                LabelPrimaryVolumeValue.Text = $"{SliderPrimaryVolume.Value}%";
+                TextPrimaryVolumeValue.Text = $"{(int)SliderPrimaryVolume.Value}%";
             }
 
             float subVol = Engine.GetSubVolume();
             if (subVol >= 0)
             {
                 SliderSubVolume.Value = (int)(subVol * 100);
-                LabelSubVolumeValue.Text = $"{SliderSubVolume.Value}%";
+                TextSubVolumeValue.Text = $"{(int)SliderSubVolume.Value}%";
             }
         }
         finally
@@ -146,79 +139,71 @@ public partial class MainForm : Form
         }
     }
 
+    // ── Event handlers ──────────────────────────────────────
 
     private void OnDevicesChanged(object? sender, EventArgs e)
     {
-        if (InvokeRequired)
-        {
-            BeginInvoke(RefreshDeviceList);
-            return;
-        }
-        RefreshDeviceList();
+        Dispatcher.BeginInvoke(RefreshDeviceList);
     }
 
-    private void OnPrimaryDeviceChanged(object? sender, EventArgs e)
+    private void OnPrimaryDeviceChanged(object? sender, SelectionChangedEventArgs e)
     {
         Engine.SetHeadphoneDevice(GetSelectedDevice(ComboPrimaryDevice));
         SyncVolumeSlidersFromDevices();
     }
 
-    private void OnSubDeviceChanged(object? sender, EventArgs e)
+    private void OnSubDeviceChanged(object? sender, SelectionChangedEventArgs e)
     {
         Engine.SetSubDevice(GetSelectedDevice(ComboSubDevice));
         SyncVolumeSlidersFromDevices();
     }
 
-    private void OnPrimaryLatencyChanged(object? sender, EventArgs e)
+    private void OnPrimaryLatencyChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        int ms = SliderPrimaryLatency.Value;
-        LabelPrimaryLatencyValue.Text = $"{ms} ms";
+        int ms = (int)SliderPrimaryLatency.Value;
+        TextPrimaryLatencyValue.Text = $"{ms} ms";
         Engine.SetHeadphoneDelayMs(ms);
     }
 
-    private void OnPrimaryVolumeChanged(object? sender, EventArgs e)
+    private void OnPrimaryVolumeChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        int pct = SliderPrimaryVolume.Value;
-        LabelPrimaryVolumeValue.Text = $"{pct}%";
+        int pct = (int)SliderPrimaryVolume.Value;
+        TextPrimaryVolumeValue.Text = $"{pct}%";
         if (!ShouldIgnoreVolumeEvents)
             Engine.SetHeadphoneVolume(pct / 100f);
     }
 
-    private void OnSubLatencyChanged(object? sender, EventArgs e)
+    private void OnSubLatencyChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        int ms = SliderSubLatency.Value;
-        LabelSubLatencyValue.Text = $"{ms} ms";
+        int ms = (int)SliderSubLatency.Value;
+        TextSubLatencyValue.Text = $"{ms} ms";
         Engine.SetSubDelayMs(ms);
     }
 
-    private void OnSubVolumeChanged(object? sender, EventArgs e)
+    private void OnSubVolumeChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        int pct = SliderSubVolume.Value;
-        LabelSubVolumeValue.Text = $"{pct}%";
+        int pct = (int)SliderSubVolume.Value;
+        TextSubVolumeValue.Text = $"{pct}%";
         if (!ShouldIgnoreVolumeEvents)
             Engine.SetSubVolume(pct / 100f);
     }
 
-    private void OnLowPassChanged(object? sender, EventArgs e)
+    private void OnLowPassChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        int freq = SliderLowPass.Value;
-        LabelLowPassValue.Text = $"{freq} Hz";
+        int freq = (int)SliderLowPass.Value;
+        TextLowPassValue.Text = $"{freq} Hz";
         Engine.SetLowPassFrequency(freq);
     }
 
-    private void OnStartStopClicked(object? sender, EventArgs e)
+    private void OnStartStopClicked(object? sender, RoutedEventArgs e)
     {
         if (Engine.IsRunning)
-        {
             StopEngine();
-        }
         else
-        {
             StartEngine();
-        }
     }
 
-
+    // ── Start / Stop ────────────────────────────────────────
 
     private void StartEngine()
     {
@@ -226,23 +211,23 @@ public partial class MainForm : Form
         {
             Engine.SetHeadphoneDevice(GetSelectedDevice(ComboPrimaryDevice));
             Engine.SetSubDevice(GetSelectedDevice(ComboSubDevice));
-            Engine.SetHeadphoneDelayMs(SliderPrimaryLatency.Value);
-            Engine.SetSubDelayMs(SliderSubLatency.Value);
-            Engine.SetLowPassFrequency(SliderLowPass.Value);
+            Engine.SetHeadphoneDelayMs((int)SliderPrimaryLatency.Value);
+            Engine.SetSubDelayMs((int)SliderSubLatency.Value);
+            Engine.SetLowPassFrequency((float)SliderLowPass.Value);
 
             Engine.Start();
 
-            ButtonStartStop.Text = "Stop";
-            ButtonStartStop.BackColor = Color.FromArgb(180, 40, 40);
-            LabelStatus.Text = "Running";
-            LabelStatus.ForeColor = Color.FromArgb(80, 220, 80);
+            ButtonStartStop.Content = "Stop";
+            ButtonStartStop.Background = StopBrush;
+            TextStatus.Text = "Running";
+            TextStatus.Foreground = RunningBrush;
 
             SetControlsEnabled(false);
         }
         catch (Exception ex)
         {
-            LabelStatus.Text = $"Error: {ex.Message}";
-            LabelStatus.ForeColor = Color.FromArgb(255, 100, 100);
+            TextStatus.Text = $"Error: {ex.Message}";
+            TextStatus.Foreground = ErrorBrush;
         }
     }
 
@@ -250,54 +235,52 @@ public partial class MainForm : Form
     {
         Engine.Stop();
 
-        ButtonStartStop.Text = "Start";
-        ButtonStartStop.BackColor = Color.FromArgb(0, 120, 60);
-        LabelStatus.Text = "Stopped";
-        LabelStatus.ForeColor = Color.FromArgb(180, 180, 180);
+        ButtonStartStop.Content = "Start";
+        ButtonStartStop.Background = StartBrush;
+        TextStatus.Text = "Stopped";
+        TextStatus.Foreground = DimBrush;
 
         SetControlsEnabled(true);
     }
 
     private void SetControlsEnabled(bool enabled)
     {
-        ComboPrimaryDevice.Enabled = enabled;
-        ComboSubDevice.Enabled = enabled;
+        ComboPrimaryDevice.IsEnabled = enabled;
+        ComboSubDevice.IsEnabled = enabled;
     }
 
+    // ── Engine events (come from background thread) ─────────
 
     private void OnEngineError(object? sender, string message)
     {
-        if (InvokeRequired)
+        Dispatcher.BeginInvoke(() =>
         {
-            BeginInvoke(() => OnEngineError(sender, message));
-            return;
-        }
-
-        LabelStatus.Text = $"Error: {message}";
-        LabelStatus.ForeColor = Color.FromArgb(255, 100, 100);
+            TextStatus.Text = $"Error: {message}";
+            TextStatus.Foreground = ErrorBrush;
+        });
     }
 
     private void OnEngineStopped(object? sender, EventArgs e)
     {
-        if (InvokeRequired)
+        Dispatcher.BeginInvoke(() =>
         {
-            BeginInvoke(() => OnEngineStopped(sender, e));
-            return;
-        }
+            ButtonStartStop.Content = "Start";
+            ButtonStartStop.Background = StartBrush;
 
-        ButtonStartStop.Text = "Start";
-        ButtonStartStop.BackColor = Color.FromArgb(0, 120, 60);
-        if (LabelStatus.ForeColor != Color.FromArgb(255, 100, 100))
-        {
-            LabelStatus.Text = "Stopped";
-            LabelStatus.ForeColor = Color.FromArgb(180, 180, 180);
-        }
+            if (TextStatus.Foreground is SolidColorBrush brush &&
+                brush.Color != ErrorBrush.Color)
+            {
+                TextStatus.Text = "Stopped";
+                TextStatus.Foreground = DimBrush;
+            }
 
-        SetControlsEnabled(true);
+            SetControlsEnabled(true);
+        });
     }
 
-    // Cleanup
-    private void OnFormClosing(object? sender, FormClosingEventArgs e)
+    // ── Cleanup ─────────────────────────────────────────────
+
+    private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         Engine.Dispose();
         DeviceManager.Dispose();
