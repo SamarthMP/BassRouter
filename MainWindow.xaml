@@ -5,6 +5,7 @@
         Width="420" SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
+        TextElement.FontFamily="/Resources/#Sora"
         Background="#1D1E20">
 
     <Window.Resources>
@@ -18,6 +19,14 @@
         <SolidColorBrush x:Key="DimTextBrush" Color="#F1ECF3"/>
         <SolidColorBrush x:Key="ValueBrush" Color="#F0C050"/>
         <SolidColorBrush x:Key="BottomBarBrush" Color="#151528"/>
+
+        <!-- Fonts -->
+        <Style TargetType="{x:Type Control}">
+            <Setter Property="FontFamily" Value="/Resources/#Sora"  />
+        </Style>
+        <Style TargetType="{x:Type TextBlock}">
+            <Setter Property="FontFamily" Value="/Resources/#Sora" />
+        </Style>
 
         <!--  ComboBox Style  -->
         <Style x:Key="DarkComboBox" TargetType="ComboBox">
