@@ -72,9 +72,26 @@ public sealed class AudioDeviceManager : IDisposable
         }
     }
 
+    public static bool IsVirtualDevice(MMDevice device)
+    {
+        if (device.FriendlyName.Contains("Steam Streaming")) return true;
+
+        return false;
+    }
+
     private void OnDevicesChanged()
     {
         DevicesChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnDefaultDeviceChanged()
+    {
+        if (!IsVirtualDevice(GetDefaultRenderDevice()))
+        {
+            // Exit when the device is changed to something that's not a virtual device
+            // TODO: Instead make this stop just the audio engine and display a warning
+            Environment.Exit(0);
+        }
     }
 
     public void Dispose()
@@ -100,7 +117,7 @@ public sealed class AudioDeviceManager : IDisposable
         public void OnDeviceStateChanged(string deviceId, DeviceState newState) => _owner.OnDevicesChanged();
         public void OnDeviceAdded(string pwstrDeviceId) => _owner.OnDevicesChanged();
         public void OnDeviceRemoved(string deviceId) => _owner.OnDevicesChanged();
-        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId) { }
+        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId) => _owner.OnDefaultDeviceChanged();
         public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) { }
     }
 }
