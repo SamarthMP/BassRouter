@@ -3,10 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:sys="clr-namespace:System.Windows;assembly=PresentationFramework"
         Title="BassRouter"
-        Width="420" SizeToContent="Height"
+        Width="400" SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         TextElement.FontFamily="/Resources/#Sora"
+        Background="#3C464646"
         WindowStyle="None"
         AllowsTransparency="True"
         >
@@ -197,7 +198,7 @@
         </Style>
     </Window.Resources>
 
-    <StackPanel Background="Gray" Margin="0">
+    <StackPanel Background="Transparent" Margin="0">
         <Border Padding="18,12,10,8">
             <StackPanel Orientation="Horizontal">
                 <Image Width="32" Height="32" Source="/Resources/Icon.png" Margin="0,0,4,0"/>

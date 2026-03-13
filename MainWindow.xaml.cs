@@ -1,5 +1,6 @@
 using BassRouter.Audio;
 using NAudio.CoreAudioApi;
+using SamsidParty;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,15 +27,6 @@ public partial class MainWindow : Window
     [DllImport("DwmApi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
-    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
-
-    private enum DWM_WINDOW_CORNER_PREFERENCE
-    {
-        DWMWA_WINDOW_CORNER_PREFERENCE_UNDEFINED = 0,
-        DWMWA_WINDOW_CORNER_PREFERENCE_DONOTROUND = 1,
-        DWMWA_WINDOW_CORNER_PREFERENCE_ROUND = 2,
-        DWMWA_WINDOW_CORNER_PREFERENCE_ROUNDSMALL = 3
-    }
 
     #endregion
 
@@ -45,8 +37,8 @@ public partial class MainWindow : Window
         SourceInitialized += (s, e) =>
         {
             IntPtr handle = new WindowInteropHelper(this).EnsureHandle();
-            var preference = (int)DWM_WINDOW_CORNER_PREFERENCE.DWMWA_WINDOW_CORNER_PREFERENCE_ROUND;
-            DwmSetWindowAttribute(handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref preference, sizeof(int));
+            WindowHelpers.FixWindows11Corners(handle);
+            WindowHelpers.SetWindowBackgroundMode(handle, WindowHelpers.WindowBackgroundMode.BlurBehind);
         };
 
         DeviceManager = new AudioDeviceManager();
