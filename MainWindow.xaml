@@ -7,7 +7,16 @@
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         TextElement.FontFamily="/Resources/#Sora"
+        WindowStyle="None"
+        AllowsTransparency="True"
         Background="#1D1E20">
+
+    <!--  Custom Titlebar  -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome 
+            CaptionHeight="32" 
+            ResizeBorderThickness="{x:Static SystemParameters.WindowResizeBorderThickness}" />
+    </WindowChrome.WindowChrome>
 
     <Window.Resources>
         <!--  Accent Colors  -->
@@ -212,7 +221,7 @@
                                Text="0 ms" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
                 </Grid>
                 <Slider x:Name="SliderPrimaryLatency" Style="{StaticResource DarkSlider}"
-                        Minimum="0" Maximum="5000" Value="0"
+                        Minimum="0" Maximum="1000" Value="0"
                         TickFrequency="100" IsSnapToTickEnabled="False"/>
 
                 <Grid Margin="0,8,0,0">

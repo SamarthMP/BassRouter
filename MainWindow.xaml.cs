@@ -1,8 +1,10 @@
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
 using BassRouter.Audio;
 using NAudio.CoreAudioApi;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace BassRouter;
 
@@ -19,9 +21,33 @@ public partial class MainWindow : Window
     private static readonly SolidColorBrush ErrorBrush = new(Color.FromRgb(255, 100, 100));
     private static readonly SolidColorBrush DimBrush = new(Color.FromRgb(144, 144, 168));
 
+    #region Window Management Native Code
+
+    [DllImport("DwmApi.dll")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+
+    private enum DWM_WINDOW_CORNER_PREFERENCE
+    {
+        DWMWA_WINDOW_CORNER_PREFERENCE_UNDEFINED = 0,
+        DWMWA_WINDOW_CORNER_PREFERENCE_DONOTROUND = 1,
+        DWMWA_WINDOW_CORNER_PREFERENCE_ROUND = 2,
+        DWMWA_WINDOW_CORNER_PREFERENCE_ROUNDSMALL = 3
+    }
+
+    #endregion
+
     public MainWindow()
     {
         InitializeComponent();
+
+        SourceInitialized += (s, e) =>
+        {
+            IntPtr handle = new WindowInteropHelper(this).EnsureHandle();
+            var preference = (int)DWM_WINDOW_CORNER_PREFERENCE.DWMWA_WINDOW_CORNER_PREFERENCE_ROUND;
+            DwmSetWindowAttribute(handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref preference, sizeof(int));
+        };
 
         DeviceManager = new AudioDeviceManager();
         Engine = new AudioEngine();
