@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Resources\Icon.png" />
     <None Remove="Resources\Sora.ttf" />
   </ItemGroup>
 
@@ -17,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Resources\Icon.png" />
     <Resource Include="Resources\Sora.ttf" />
   </ItemGroup>
 

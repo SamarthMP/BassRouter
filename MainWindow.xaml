@@ -9,7 +9,7 @@
         TextElement.FontFamily="/Resources/#Sora"
         WindowStyle="None"
         AllowsTransparency="True"
-        Background="#1D1E20">
+        >
 
     <!--  Custom Titlebar  -->
     <WindowChrome.WindowChrome>
@@ -197,117 +197,125 @@
         </Style>
     </Window.Resources>
 
-    <StackPanel Margin="0">
-
-        <!-- PRIMARY AUDIO OUTPUT -->
-        <Border Background="{StaticResource CardBrush}" CornerRadius="4"
-                BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
-                Margin="14,14,14,0" Padding="10">
-            <StackPanel>
-                <TextBlock Text="Primary Audio Output" FontSize="15" FontWeight="Bold"
-                           Foreground="{StaticResource TextBrush}" Margin="0,0,0,10"/>
-
-                <TextBlock Text="Device" Foreground="{StaticResource DimTextBrush}" FontSize="12" Margin="0,0,0,4"/>
-                <ComboBox x:Name="ComboPrimaryDevice" Style="{StaticResource DarkComboBox}"
-                          ItemContainerStyle="{StaticResource DarkComboBoxItem}"/>
-
-                <Grid Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Artificial Latency" Foreground="{StaticResource DimTextBrush}" FontSize="12"/>
-                    <TextBlock x:Name="TextPrimaryLatencyValue" Grid.Column="1"
-                               Text="0 ms" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
-                </Grid>
-                <Slider x:Name="SliderPrimaryLatency" Style="{StaticResource DarkSlider}"
-                        Minimum="0" Maximum="1000" Value="0"
-                        TickFrequency="100" IsSnapToTickEnabled="False"/>
-
-                <Grid Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Volume" Foreground="{StaticResource DimTextBrush}" FontSize="12"/>
-                    <TextBlock x:Name="TextPrimaryVolumeValue" Grid.Column="1"
-                               Text="100%" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
-                </Grid>
-                <Slider x:Name="SliderPrimaryVolume" Style="{StaticResource DarkSlider}"
-                        Minimum="0" Maximum="100" Value="100"
-                        TickFrequency="1" IsSnapToTickEnabled="False" />
+    <StackPanel Background="Gray" Margin="0">
+        <Border Padding="18,12,10,8">
+            <StackPanel Orientation="Horizontal">
+                <Image Width="32" Height="32" Source="/Resources/Icon.png" Margin="0,0,4,0"/>
+                <TextBlock Text="BassRouter" FontSize="28" FontWeight="Medium" Foreground="{StaticResource TextBrush}"/>
             </StackPanel>
         </Border>
+        <StackPanel Background="#1D1E20" Margin="0">
 
-        <!-- SUBWOOFER AUDIO OUTPUT -->
-        <Border Background="{StaticResource CardBrush}" CornerRadius="4"
-                BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
-                Margin="14,10,14,0" Padding="10">
-            <StackPanel>
-                <TextBlock Text="Subwoofer Audio Output" FontSize="15" FontWeight="Bold"
-                           Foreground="{StaticResource TextBrush}" Margin="0,0,0,10"/>
+            <!-- PRIMARY AUDIO OUTPUT -->
+            <Border Background="{StaticResource CardBrush}" CornerRadius="4"
+                    BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
+                    Margin="14,14,14,0" Padding="10">
+                <StackPanel>
+                    <TextBlock Text="Primary Audio Output" FontSize="15" FontWeight="Bold"
+                               Foreground="{StaticResource TextBrush}" Margin="0,0,0,10"/>
 
-                <TextBlock Text="Device" Foreground="{StaticResource DimTextBrush}" FontSize="12" Margin="0,0,0,4"/>
-                <ComboBox x:Name="ComboSubDevice" Style="{StaticResource DarkComboBox}"
-                          ItemContainerStyle="{StaticResource DarkComboBoxItem}"/>
+                    <TextBlock Text="Device" Foreground="{StaticResource DimTextBrush}" FontSize="12" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="ComboPrimaryDevice" Style="{StaticResource DarkComboBox}"
+                              ItemContainerStyle="{StaticResource DarkComboBoxItem}"/>
 
-                <Grid Margin="0,8,0,0">
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Artificial Latency" Foreground="{StaticResource DimTextBrush}" FontSize="12"/>
+                        <TextBlock x:Name="TextPrimaryLatencyValue" Grid.Column="1"
+                                   Text="0 ms" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
+                    </Grid>
+                    <Slider x:Name="SliderPrimaryLatency" Style="{StaticResource DarkSlider}"
+                            Minimum="0" Maximum="1000" Value="0"
+                            TickFrequency="100" IsSnapToTickEnabled="False"/>
+
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Volume" Foreground="{StaticResource DimTextBrush}" FontSize="12"/>
+                        <TextBlock x:Name="TextPrimaryVolumeValue" Grid.Column="1"
+                                   Text="100%" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
+                    </Grid>
+                    <Slider x:Name="SliderPrimaryVolume" Style="{StaticResource DarkSlider}"
+                            Minimum="0" Maximum="100" Value="100"
+                            TickFrequency="1" IsSnapToTickEnabled="False" />
+                </StackPanel>
+            </Border>
+
+            <!-- SUBWOOFER AUDIO OUTPUT -->
+            <Border Background="{StaticResource CardBrush}" CornerRadius="4"
+                    BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1"
+                    Margin="14,10,14,0" Padding="10">
+                <StackPanel>
+                    <TextBlock Text="Subwoofer Audio Output" FontSize="15" FontWeight="Bold"
+                               Foreground="{StaticResource TextBrush}" Margin="0,0,0,10"/>
+
+                    <TextBlock Text="Device" Foreground="{StaticResource DimTextBrush}" FontSize="12" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="ComboSubDevice" Style="{StaticResource DarkComboBox}"
+                              ItemContainerStyle="{StaticResource DarkComboBoxItem}"/>
+
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Artificial Latency" Foreground="{StaticResource DimTextBrush}" FontSize="12"/>
+                        <TextBlock x:Name="TextSubLatencyValue" Grid.Column="1"
+                                   Text="0 ms" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
+                    </Grid>
+                    <Slider x:Name="SliderSubLatency" Style="{StaticResource DarkSlider}"
+                            Minimum="0" Maximum="5000" Value="0"
+                            TickFrequency="100" IsSnapToTickEnabled="False" />
+
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Volume" Foreground="{StaticResource DimTextBrush}" FontSize="12"/>
+                        <TextBlock x:Name="TextSubVolumeValue" Grid.Column="1"
+                                   Text="100%" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
+                    </Grid>
+                    <Slider x:Name="SliderSubVolume" Style="{StaticResource DarkSlider}"
+                            Minimum="0" Maximum="100" Value="100"
+                            TickFrequency="1" IsSnapToTickEnabled="False" />
+
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Low Pass Frequency" Foreground="{StaticResource DimTextBrush}" FontSize="12"/>
+                        <TextBlock x:Name="TextLowPassValue" Grid.Column="1"
+                                   Text="120 Hz" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
+                    </Grid>
+                    <Slider x:Name="SliderLowPass" Style="{StaticResource DarkSlider}"
+                            Minimum="10" Maximum="300" Value="120"
+                            TickFrequency="1" IsSnapToTickEnabled="False" />
+                </StackPanel>
+            </Border>
+
+            <!-- BOTTOM BAR -->
+            <Border Margin="14,14" Padding="0">
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Artificial Latency" Foreground="{StaticResource DimTextBrush}" FontSize="12"/>
-                    <TextBlock x:Name="TextSubLatencyValue" Grid.Column="1"
-                               Text="0 ms" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
+
+                    <TextBlock x:Name="TextStatus" Text="Stopped"
+                               Foreground="{StaticResource DimTextBrush}" FontSize="13"
+                               VerticalAlignment="Center"/>
+
+                    <Button x:Name="ButtonStartStop" Grid.Column="1"
+                            Content="Start" Background="#0A7A3E"
+                            Style="{StaticResource StartStopButton}"/>
                 </Grid>
-                <Slider x:Name="SliderSubLatency" Style="{StaticResource DarkSlider}"
-                        Minimum="0" Maximum="5000" Value="0"
-                        TickFrequency="100" IsSnapToTickEnabled="False" />
-
-                <Grid Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Volume" Foreground="{StaticResource DimTextBrush}" FontSize="12"/>
-                    <TextBlock x:Name="TextSubVolumeValue" Grid.Column="1"
-                               Text="100%" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
-                </Grid>
-                <Slider x:Name="SliderSubVolume" Style="{StaticResource DarkSlider}"
-                        Minimum="0" Maximum="100" Value="100"
-                        TickFrequency="1" IsSnapToTickEnabled="False" />
-
-                <Grid Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Low Pass Frequency" Foreground="{StaticResource DimTextBrush}" FontSize="12"/>
-                    <TextBlock x:Name="TextLowPassValue" Grid.Column="1"
-                               Text="120 Hz" Foreground="{StaticResource ValueBrush}" FontSize="12"/>
-                </Grid>
-                <Slider x:Name="SliderLowPass" Style="{StaticResource DarkSlider}"
-                        Minimum="10" Maximum="300" Value="120"
-                        TickFrequency="1" IsSnapToTickEnabled="False" />
-            </StackPanel>
-        </Border>
-
-        <!-- BOTTOM BAR -->
-        <Border Margin="14,14" Padding="0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <TextBlock x:Name="TextStatus" Text="Stopped"
-                           Foreground="{StaticResource DimTextBrush}" FontSize="13"
-                           VerticalAlignment="Center"/>
-
-                <Button x:Name="ButtonStartStop" Grid.Column="1"
-                        Content="Start" Background="#0A7A3E"
-                        Style="{StaticResource StartStopButton}"/>
-            </Grid>
-        </Border>
+            </Border>
+        </StackPanel>
     </StackPanel>
 </Window>
