@@ -16,6 +16,7 @@ public sealed class AudioEngineConfigStore
     {
         string appDataDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SamsidParty",
             "BassRouter");
 
         ConfigPath = Path.Combine(appDataDirectory, "config.json");

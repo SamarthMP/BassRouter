@@ -109,6 +109,7 @@ public sealed class AudioDeviceManager : IDisposable
     public static bool IsVirtualDevice(MMDevice device)
     {
         if (device.FriendlyName.Contains("Steam Streaming")) return true;
+        if (device.FriendlyName.ToLower().Contains("Virtual")) return true;
 
         return false;
     }
