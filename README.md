@@ -24,3 +24,24 @@ The reason this util doesn't come with it's own drivers is because you need a sp
 
 - Your headphones and speakers need to have the same sample rate otherwise you might get some artifacting.
 - Enabling spacial audio like windows sonic or dolby atmos might cause issues.
+
+## Release Automation
+
+Pushing to the `production` branch triggers [.github/workflows/production-release.yml](.github/workflows/production-release.yml), which:
+
+- Builds release packages for `win-x64` and `win-arm64`
+- Publishes framework-dependent output for each runtime
+- Signs `BassRouter.exe` with the certificate stored in GitHub Actions secrets
+- Creates a GitHub Release tagged as `v<Version>` from `BassRouter.csproj`
+- Uploads both zip files to that release
+
+Required repository secrets:
+
+- `SIGNING_PFX_BASE64`: Base64-encoded contents of the code-signing `.pfx`
+- `SIGNING_PASSWORD`: Password for that `.pfx`
+
+Release versioning:
+
+- The workflow reads the `<Version>` value from `BassRouter.csproj`
+- That value must be valid semver, for example `1.2.3`
+- Each production release must use a new version or the workflow will fail if `v<Version>` already exists
