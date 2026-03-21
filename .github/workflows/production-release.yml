@@ -106,8 +106,35 @@ jobs:
             throw 'Missing SIGNING_PASSWORD secret.'
           }
 
+          $rawBase64 = $env:SIGNING_PFX_BASE64.Trim()
+          if ($rawBase64.Length -ge 2) {
+            $firstChar = $rawBase64[0]
+            $lastChar = $rawBase64[$rawBase64.Length - 1]
+            if (($firstChar -eq '"' -and $lastChar -eq '"') -or ($firstChar -eq "'" -and $lastChar -eq "'")) {
+              $rawBase64 = $rawBase64.Substring(1, $rawBase64.Length - 2)
+            }
+          }
+
+          $normalizedBase64 = $rawBase64 -replace '\s+', ''
+          $invalidCharacters = [regex]::Matches($normalizedBase64, '[^A-Za-z0-9\+/=]') | ForEach-Object { $_.Value } | Select-Object -Unique
+          if ($invalidCharacters) {
+            $invalidList = ($invalidCharacters | ForEach-Object { "'$_'" }) -join ', '
+            throw "SIGNING_PFX_BASE64 contains invalid base64 characters: $invalidList"
+          }
+
+          $paddingRemainder = $normalizedBase64.Length % 4
+          if ($paddingRemainder -ne 0) {
+            $normalizedBase64 = $normalizedBase64.PadRight($normalizedBase64.Length + (4 - $paddingRemainder), '=')
+          }
+
           $certPath = Join-Path $env:RUNNER_TEMP 'signing-cert.pfx'
-          [System.IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:SIGNING_PFX_BASE64))
+          try {
+            [System.IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($normalizedBase64))
+          }
+          catch {
+            throw "Failed to decode SIGNING_PFX_BASE64 after normalization. Re-save the GitHub secret as the raw base64 of the .pfx file without extra quotes or formatting. $($_.Exception.Message)"
+          }
+
           "SIGNING_CERT_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Publish framework-dependent app
