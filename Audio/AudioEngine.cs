@@ -1,6 +1,7 @@
 using NAudio.CoreAudioApi;
 using NAudio.Dsp;
 using NAudio.Wave;
+using System.Runtime.ExceptionServices;
 
 namespace BassRouter.Audio;
 
@@ -34,11 +35,17 @@ public sealed class AudioEngine : IDisposable
     private int HeadphoneDelayMs;
     private int SubDelayMs;
     private float LowPassFrequency = 120f;
+    private string? LastErrorMessage;
 
     public bool IsRunning
     {
         get { lock (_Lock) return _IsRunning; }
     }
+
+    /// <summary>
+    /// Raised whenever the engine state or configuration changes.
+    /// </summary>
+    public event EventHandler<AudioEngineStateChangedEventArgs>? StateChanged;
 
     /// <summary>
     /// Raised when the engine stops unexpectedly (e.g. device disconnected).
@@ -51,11 +58,35 @@ public sealed class AudioEngine : IDisposable
     /// </summary>
     public event EventHandler? Stopped;
 
-    public void SetHeadphoneDevice(MMDevice? device) { lock (_Lock) HeadphoneDevice = device; }
-    public void SetSubDevice(MMDevice? device) { lock (_Lock) SubDevice = device; }
+    public void SetHeadphoneDevice(MMDevice? device)
+    {
+        AudioEngineState state;
+        lock (_Lock)
+        {
+            HeadphoneDevice = device;
+            LastErrorMessage = null;
+            state = CreateState_NoLock();
+        }
+
+        PublishState(state);
+    }
+
+    public void SetSubDevice(MMDevice? device)
+    {
+        AudioEngineState state;
+        lock (_Lock)
+        {
+            SubDevice = device;
+            LastErrorMessage = null;
+            state = CreateState_NoLock();
+        }
+
+        PublishState(state);
+    }
 
     public void SetHeadphoneDelayMs(int ms)
     {
+        AudioEngineState state;
         lock (_Lock)
         {
             HeadphoneDelayMs = Math.Clamp(ms, 0, 5000);
@@ -66,11 +97,17 @@ public sealed class AudioEngine : IDisposable
                 HeadphoneDelayL.Resize(samples);
                 HeadphoneDelayR.Resize(samples);
             }
+
+            LastErrorMessage = null;
+            state = CreateState_NoLock();
         }
+
+        PublishState(state);
     }
 
     public void SetSubDelayMs(int ms)
     {
+        AudioEngineState state;
         lock (_Lock)
         {
             SubDelayMs = Math.Clamp(ms, 0, 5000);
@@ -80,11 +117,17 @@ public sealed class AudioEngine : IDisposable
                 SubDelayL.Resize(samples);
                 SubDelayR.Resize(samples);
             }
+
+            LastErrorMessage = null;
+            state = CreateState_NoLock();
         }
+
+        PublishState(state);
     }
 
     public void SetLowPassFrequency(float frequency)
     {
+        AudioEngineState state;
         lock (_Lock)
         {
             LowPassFrequency = Math.Clamp(frequency, 10f, 300f);
@@ -94,7 +137,12 @@ public sealed class AudioEngine : IDisposable
                 LeftFilter = BiQuadFilter.LowPassFilter(sr, LowPassFrequency, 0.7f);
                 RightFilter = BiQuadFilter.LowPassFilter(sr, LowPassFrequency, 0.7f);
             }
+
+            LastErrorMessage = null;
+            state = CreateState_NoLock();
         }
+
+        PublishState(state);
     }
 
     /// <summary>
@@ -103,15 +151,21 @@ public sealed class AudioEngine : IDisposable
     /// </summary>
     public void SetHeadphoneVolume(float volume)
     {
+        AudioEngineState state;
         lock (_Lock)
         {
             try
             {
                 if (HeadphoneDevice?.State == DeviceState.Active)
-                    HeadphoneDevice.AudioEndpointVolume.MasterVolumeLevelScalar = Math.Clamp(volume, 0f, 1f);
+                    SetDeviceVolume_NoLock(HeadphoneDevice, volume);
             }
             catch { }
+
+            LastErrorMessage = null;
+            state = CreateState_NoLock();
         }
+
+        PublishState(state);
     }
 
     /// <summary>
@@ -119,15 +173,21 @@ public sealed class AudioEngine : IDisposable
     /// </summary>
     public void SetSubVolume(float volume)
     {
+        AudioEngineState state;
         lock (_Lock)
         {
             try
             {
                 if (SubDevice?.State == DeviceState.Active)
-                    SubDevice.AudioEndpointVolume.MasterVolumeLevelScalar = Math.Clamp(volume, 0f, 1f);
+                    SetDeviceVolume_NoLock(SubDevice, volume);
             }
             catch { }
+
+            LastErrorMessage = null;
+            state = CreateState_NoLock();
         }
+
+        PublishState(state);
     }
 
     /// <summary>
@@ -137,13 +197,7 @@ public sealed class AudioEngine : IDisposable
     {
         lock (_Lock)
         {
-            try
-            {
-                if (HeadphoneDevice?.State == DeviceState.Active)
-                    return HeadphoneDevice.AudioEndpointVolume.MasterVolumeLevelScalar;
-            }
-            catch { }
-            return -1f;
+            return GetDeviceVolume_NoLock(HeadphoneDevice);
         }
     }
 
@@ -154,13 +208,15 @@ public sealed class AudioEngine : IDisposable
     {
         lock (_Lock)
         {
-            try
-            {
-                if (SubDevice?.State == DeviceState.Active)
-                    return SubDevice.AudioEndpointVolume.MasterVolumeLevelScalar;
-            }
-            catch { }
-            return -1f;
+            return GetDeviceVolume_NoLock(SubDevice);
+        }
+    }
+
+    public AudioEngineState GetState()
+    {
+        lock (_Lock)
+        {
+            return CreateState_NoLock();
         }
     }
 
@@ -170,6 +226,9 @@ public sealed class AudioEngine : IDisposable
     /// </summary>
     public void Start()
     {
+        AudioEngineState? state = null;
+        Exception? exception = null;
+
         lock (_Lock)
         {
             if (_IsRunning)
@@ -182,7 +241,7 @@ public sealed class AudioEngine : IDisposable
 
             try
             {
-                var enumerator = new MMDeviceEnumerator();
+                using var enumerator = new MMDeviceEnumerator();
                 CaptureDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
                 Capture = new WasapiLoopbackCapture(CaptureDevice);
 
@@ -216,13 +275,23 @@ public sealed class AudioEngine : IDisposable
                 Capture.StartRecording();
 
                 _IsRunning = true;
+                LastErrorMessage = null;
+                state = CreateState_NoLock();
             }
-            catch
+            catch (Exception ex)
             {
                 CleanupResources();
-                throw;
+                LastErrorMessage = ex.Message;
+                state = CreateState_NoLock();
+                exception = ex;
             }
         }
+
+        if (state != null)
+            PublishState(state);
+
+        if (exception != null)
+            ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
     /// <summary>
@@ -230,14 +299,21 @@ public sealed class AudioEngine : IDisposable
     /// </summary>
     public void Stop()
     {
+        AudioEngineState? state = null;
+
         lock (_Lock)
         {
             if (!_IsRunning)
                 return;
 
             _IsRunning = false;
+            LastErrorMessage = null;
             CleanupResources();
+            state = CreateState_NoLock();
         }
+
+        if (state != null)
+            PublishState(state);
 
         Stopped?.Invoke(this, EventArgs.Empty);
     }
@@ -308,6 +384,7 @@ public sealed class AudioEngine : IDisposable
     private void HandleError(string message)
     {
         bool wasRunning;
+        AudioEngineState state;
         lock (_Lock)
         {
             wasRunning = _IsRunning;
@@ -316,7 +393,12 @@ public sealed class AudioEngine : IDisposable
                 _IsRunning = false;
                 CleanupResources();
             }
+
+            LastErrorMessage = message;
+            state = CreateState_NoLock();
         }
+
+        PublishState(state);
 
         if (wasRunning)
         {
@@ -354,5 +436,67 @@ public sealed class AudioEngine : IDisposable
         if (IsDisposed) return;
         IsDisposed = true;
         Stop();
+    }
+
+    private AudioEngineState CreateState_NoLock()
+    {
+        return new AudioEngineState(
+            IsRunning: _IsRunning,
+            HeadphoneDeviceId: HeadphoneDevice?.ID,
+            HeadphoneDeviceName: HeadphoneDevice?.FriendlyName,
+            SubDeviceId: SubDevice?.ID,
+            SubDeviceName: SubDevice?.FriendlyName,
+            HeadphoneDelayMs: HeadphoneDelayMs,
+            SubDelayMs: SubDelayMs,
+            LowPassFrequency: LowPassFrequency,
+            HeadphoneVolume: GetHeadphoneVolume_NoLock(),
+            SubVolume: GetSubVolume_NoLock(),
+            LastErrorMessage: LastErrorMessage);
+    }
+
+    private float GetHeadphoneVolume_NoLock()
+    {
+        return GetDeviceVolume_NoLock(HeadphoneDevice);
+    }
+
+    private float GetSubVolume_NoLock()
+    {
+        return GetDeviceVolume_NoLock(SubDevice);
+    }
+
+    private static void SetDeviceVolume_NoLock(MMDevice device, float volume)
+    {
+        float clampedVolume = Math.Clamp(volume, 0f, 1f);
+        var endpointVolume = device.AudioEndpointVolume;
+
+        if (clampedVolume <= 0f)
+        {
+            endpointVolume.Mute = true;
+            return;
+        }
+
+        endpointVolume.MasterVolumeLevelScalar = clampedVolume;
+        endpointVolume.Mute = false;
+    }
+
+    private static float GetDeviceVolume_NoLock(MMDevice? device)
+    {
+        try
+        {
+            if (device?.State != DeviceState.Active)
+                return -1f;
+
+            var endpointVolume = device.AudioEndpointVolume;
+            return endpointVolume.Mute ? 0f : endpointVolume.MasterVolumeLevelScalar;
+        }
+        catch
+        {
+            return -1f;
+        }
+    }
+
+    private void PublishState(AudioEngineState state)
+    {
+        StateChanged?.Invoke(this, new AudioEngineStateChangedEventArgs(state));
     }
 }

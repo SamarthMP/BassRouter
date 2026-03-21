@@ -1,5 +1,6 @@
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
+using System.Runtime.InteropServices;
 
 namespace BassRouter.Audio;
 
@@ -17,6 +18,11 @@ public sealed class AudioDeviceManager : IDisposable
     /// </summary>
     public event EventHandler? DevicesChanged;
 
+    /// <summary>
+    /// Raised when the default render device changes away from a supported virtual device.
+    /// </summary>
+    public event EventHandler? DefaultDeviceBecameNonVirtual;
+
     public AudioDeviceManager()
     {
         Enumerator = new MMDeviceEnumerator();
@@ -31,7 +37,8 @@ public sealed class AudioDeviceManager : IDisposable
     {
         try
         {
-            return Enumerator
+            using var enumerator = new MMDeviceEnumerator();
+            return enumerator
                 .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
                 .ToList();
         }
@@ -48,7 +55,8 @@ public sealed class AudioDeviceManager : IDisposable
     {
         try
         {
-            return Enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            using var enumerator = new MMDeviceEnumerator();
+            return enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
         }
         catch (Exception)
         {
@@ -63,13 +71,39 @@ public sealed class AudioDeviceManager : IDisposable
     {
         try
         {
-            var device = Enumerator.GetDevice(deviceId);
+            using var enumerator = new MMDeviceEnumerator();
+            var device = enumerator.GetDevice(deviceId);
             return device.State == DeviceState.Active ? device : null;
         }
         catch (Exception)
         {
             return null;
         }
+    }
+
+    public AudioOutputDevice? GetFirstVirtualOutputDevice()
+    {
+        try
+        {
+            MMDevice? device = GetOutputDevices().FirstOrDefault(IsVirtualDevice);
+            return device == null ? null : new AudioOutputDevice(device.ID, device.FriendlyName);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public void SetDefaultRenderDevice(string deviceId)
+    {
+        Type policyConfigType = Type.GetTypeFromCLSID(new Guid("870af99c-171d-4f9e-af0d-e63df40c2bc9"))
+            ?? throw new InvalidOperationException("PolicyConfig COM type is unavailable.");
+
+        var policyConfig = (IPolicyConfig)Activator.CreateInstance(policyConfigType)!;
+
+        Marshal.ThrowExceptionForHR(policyConfig.SetDefaultEndpoint(deviceId, Role.Console));
+        Marshal.ThrowExceptionForHR(policyConfig.SetDefaultEndpoint(deviceId, Role.Multimedia));
+        Marshal.ThrowExceptionForHR(policyConfig.SetDefaultEndpoint(deviceId, Role.Communications));
     }
 
     public static bool IsVirtualDevice(MMDevice device)
@@ -86,11 +120,10 @@ public sealed class AudioDeviceManager : IDisposable
 
     private void OnDefaultDeviceChanged()
     {
-        if (!IsVirtualDevice(GetDefaultRenderDevice()))
+        MMDevice? defaultDevice = GetDefaultRenderDevice();
+        if (defaultDevice == null || !IsVirtualDevice(defaultDevice))
         {
-            // Exit when the device is changed to something that's not a virtual device
-            // TODO: Instead make this stop just the audio engine and display a warning
-            Environment.Exit(0);
+            DefaultDeviceBecameNonVirtual?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -117,7 +150,30 @@ public sealed class AudioDeviceManager : IDisposable
         public void OnDeviceStateChanged(string deviceId, DeviceState newState) => _owner.OnDevicesChanged();
         public void OnDeviceAdded(string pwstrDeviceId) => _owner.OnDevicesChanged();
         public void OnDeviceRemoved(string deviceId) => _owner.OnDevicesChanged();
-        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId) => _owner.OnDefaultDeviceChanged();
+        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId)
+        {
+            if (flow == DataFlow.Render && role == Role.Multimedia)
+                _owner.OnDefaultDeviceChanged();
+        }
         public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) { }
+    }
+
+    [ComImport]
+    [Guid("F8679F50-850A-41CF-9C72-430F290290C8")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IPolicyConfig
+    {
+        int GetMixFormat();
+        int GetDeviceFormat();
+        int ResetDeviceFormat();
+        int SetDeviceFormat();
+        int GetProcessingPeriod();
+        int SetProcessingPeriod();
+        int GetShareMode();
+        int SetShareMode();
+        int GetPropertyValue();
+        int SetPropertyValue();
+        int SetDefaultEndpoint([MarshalAs(UnmanagedType.LPWStr)] string wszDeviceId, Role role);
+        int SetEndpointVisibility();
     }
 }

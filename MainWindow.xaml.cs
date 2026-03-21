@@ -1,37 +1,32 @@
 using BassRouter.Audio;
-using NAudio.CoreAudioApi;
 using SamsidParty;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using MediaColor = System.Windows.Media.Color;
+using WpfComboBox = System.Windows.Controls.ComboBox;
 
 namespace BassRouter;
 
 public partial class MainWindow : Window
 {
-    private readonly AudioDeviceManager DeviceManager;
-    private readonly AudioEngine Engine;
-    private List<MMDevice> Devices = new();
-    private bool ShouldIgnoreVolumeEvents;
+    private readonly AudioEngineController Controller;
+    private List<AudioOutputDevice> Devices = new();
+    private bool ShouldIgnoreControlEvents;
+    private bool AllowClose;
 
-    private static readonly SolidColorBrush StartBrush = new(Color.FromRgb(10, 122, 62));
-    private static readonly SolidColorBrush StopBrush = new(Color.FromRgb(180, 40, 40));
-    private static readonly SolidColorBrush RunningBrush = new(Color.FromRgb(80, 220, 80));
-    private static readonly SolidColorBrush ErrorBrush = new(Color.FromRgb(255, 100, 100));
-    private static readonly SolidColorBrush DimBrush = new(Color.FromRgb(144, 144, 168));
-
-    #region Window Management Native Code
-
-    [DllImport("DwmApi.dll")]
-    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    private static readonly SolidColorBrush StartBrush = new(MediaColor.FromRgb(10, 122, 62));
+    private static readonly SolidColorBrush StopBrush = new(MediaColor.FromRgb(180, 40, 40));
+    private static readonly SolidColorBrush RunningBrush = new(MediaColor.FromRgb(80, 220, 80));
+    private static readonly SolidColorBrush ErrorBrush = new(MediaColor.FromRgb(255, 100, 100));
+    private static readonly SolidColorBrush DimBrush = new(MediaColor.FromRgb(144, 144, 168));
 
 
-    #endregion
-
-    public MainWindow()
+    public MainWindow(AudioEngineController controller)
     {
+        Controller = controller;
+
         InitializeComponent();
 
         SourceInitialized += (s, e) =>
@@ -41,19 +36,16 @@ public partial class MainWindow : Window
             WindowHelpers.SetWindowBackgroundMode(handle, WindowHelpers.WindowBackgroundMode.BlurBehind);
         };
 
-        DeviceManager = new AudioDeviceManager();
-        Engine = new AudioEngine();
-
         WireEvents();
         RefreshDeviceList();
+        ApplyEngineState(Controller.GetState());
     }
 
     private void WireEvents()
     {
-        DeviceManager.DevicesChanged += OnDevicesChanged;
-
-        Engine.Error += OnEngineError;
-        Engine.Stopped += OnEngineStopped;
+        Controller.DevicesChanged += OnDevicesChanged;
+        Controller.StateChanged += OnEngineStateChanged;
+        Controller.Warning += OnControllerWarning;
 
         ComboPrimaryDevice.SelectionChanged += OnPrimaryDeviceChanged;
         ComboSubDevice.SelectionChanged += OnSubDeviceChanged;
@@ -67,6 +59,7 @@ public partial class MainWindow : Window
 
         ButtonStartStop.Click += OnStartStopClicked;
 
+        StateChanged += OnWindowStateChanged;
         Closing += OnWindowClosing;
     }
 
@@ -74,39 +67,35 @@ public partial class MainWindow : Window
 
     private void RefreshDeviceList()
     {
-        Devices = DeviceManager.GetOutputDevices();
-
-        string? previousPrimaryId = GetSelectedDeviceId(ComboPrimaryDevice);
-        string? previousSubId = GetSelectedDeviceId(ComboSubDevice);
+        Devices = Controller.GetOutputDevices().ToList();
+        AudioEngineState state = Controller.GetState();
 
         ComboPrimaryDevice.Items.Clear();
         ComboSubDevice.Items.Clear();
 
         foreach (var device in Devices)
         {
-            ComboPrimaryDevice.Items.Add(device.FriendlyName);
-            ComboSubDevice.Items.Add(device.FriendlyName);
+            ComboPrimaryDevice.Items.Add(device.Name);
+            ComboSubDevice.Items.Add(device.Name);
         }
 
-        SelectDevice(ComboPrimaryDevice, previousPrimaryId, "Headphones");
-        SelectDevice(ComboSubDevice, previousSubId, "Speaker", "Subwoofer");
-
-        SyncDeviceToEngine();
-        SyncVolumeSlidersFromDevices();
+        SelectDevice(ComboPrimaryDevice, state.HeadphoneDeviceId, "Headphones");
+        SelectDevice(ComboSubDevice, state.SubDeviceId, "Speaker", "Subwoofer");
+        ApplyEngineState(state);
     }
 
-    private void SelectDevice(ComboBox combo, string? previousId, params string[] defaultHints)
+    private void SelectDevice(WpfComboBox combo, string? previousId, params string[] defaultHints)
     {
         if (previousId != null)
         {
-            int idx = Devices.FindIndex(d => d.ID == previousId);
+            int idx = Devices.FindIndex(d => d.Id == previousId);
             if (idx >= 0) { combo.SelectedIndex = idx; return; }
         }
 
         foreach (string hint in defaultHints)
         {
             int idx = Devices.FindIndex(d =>
-                d.FriendlyName.Contains(hint, StringComparison.OrdinalIgnoreCase));
+                d.Name.Contains(hint, StringComparison.OrdinalIgnoreCase));
             if (idx >= 0) { combo.SelectedIndex = idx; return; }
         }
 
@@ -114,47 +103,10 @@ public partial class MainWindow : Window
             combo.SelectedIndex = 0;
     }
 
-    private string? GetSelectedDeviceId(ComboBox combo)
+    private string? GetSelectedDeviceId(WpfComboBox combo)
     {
         int idx = combo.SelectedIndex;
-        return idx >= 0 && idx < Devices.Count ? Devices[idx].ID : null;
-    }
-
-    private MMDevice? GetSelectedDevice(ComboBox combo)
-    {
-        int idx = combo.SelectedIndex;
-        return idx >= 0 && idx < Devices.Count ? Devices[idx] : null;
-    }
-
-    private void SyncDeviceToEngine()
-    {
-        Engine.SetHeadphoneDevice(GetSelectedDevice(ComboPrimaryDevice));
-        Engine.SetSubDevice(GetSelectedDevice(ComboSubDevice));
-    }
-
-    private void SyncVolumeSlidersFromDevices()
-    {
-        ShouldIgnoreVolumeEvents = true;
-        try
-        {
-            float hpVol = Engine.GetHeadphoneVolume();
-            if (hpVol >= 0)
-            {
-                SliderPrimaryVolume.Value = (int)(hpVol * 100);
-                TextPrimaryVolumeValue.Text = $"{(int)SliderPrimaryVolume.Value}%";
-            }
-
-            float subVol = Engine.GetSubVolume();
-            if (subVol >= 0)
-            {
-                SliderSubVolume.Value = (int)(subVol * 100);
-                TextSubVolumeValue.Text = $"{(int)SliderSubVolume.Value}%";
-            }
-        }
-        finally
-        {
-            ShouldIgnoreVolumeEvents = false;
-        }
+        return idx >= 0 && idx < Devices.Count ? Devices[idx].Id : null;
     }
 
     // ── Event handlers ──────────────────────────────────────
@@ -166,56 +118,63 @@ public partial class MainWindow : Window
 
     private void OnPrimaryDeviceChanged(object? sender, SelectionChangedEventArgs e)
     {
-        Engine.SetHeadphoneDevice(GetSelectedDevice(ComboPrimaryDevice));
-        SyncVolumeSlidersFromDevices();
+        if (ShouldIgnoreControlEvents)
+            return;
+
+        Controller.SetHeadphoneDeviceById(GetSelectedDeviceId(ComboPrimaryDevice));
     }
 
     private void OnSubDeviceChanged(object? sender, SelectionChangedEventArgs e)
     {
-        Engine.SetSubDevice(GetSelectedDevice(ComboSubDevice));
-        SyncVolumeSlidersFromDevices();
+        if (ShouldIgnoreControlEvents)
+            return;
+
+        Controller.SetSubDeviceById(GetSelectedDeviceId(ComboSubDevice));
     }
 
     private void OnPrimaryLatencyChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
     {
         int ms = (int)SliderPrimaryLatency.Value;
         TextPrimaryLatencyValue.Text = $"{ms} ms";
-        Engine.SetHeadphoneDelayMs(ms);
+        if (!ShouldIgnoreControlEvents)
+            Controller.SetHeadphoneDelayMs(ms);
     }
 
     private void OnPrimaryVolumeChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
     {
         int pct = (int)SliderPrimaryVolume.Value;
         TextPrimaryVolumeValue.Text = $"{pct}%";
-        if (!ShouldIgnoreVolumeEvents)
-            Engine.SetHeadphoneVolume(pct / 100f);
+        if (!ShouldIgnoreControlEvents)
+            Controller.SetHeadphoneVolume(pct / 100f);
     }
 
     private void OnSubLatencyChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
     {
         int ms = (int)SliderSubLatency.Value;
         TextSubLatencyValue.Text = $"{ms} ms";
-        Engine.SetSubDelayMs(ms);
+        if (!ShouldIgnoreControlEvents)
+            Controller.SetSubDelayMs(ms);
     }
 
     private void OnSubVolumeChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
     {
         int pct = (int)SliderSubVolume.Value;
         TextSubVolumeValue.Text = $"{pct}%";
-        if (!ShouldIgnoreVolumeEvents)
-            Engine.SetSubVolume(pct / 100f);
+        if (!ShouldIgnoreControlEvents)
+            Controller.SetSubVolume(pct / 100f);
     }
 
     private void OnLowPassChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
     {
         int freq = (int)SliderLowPass.Value;
         TextLowPassValue.Text = $"{freq} Hz";
-        Engine.SetLowPassFrequency(freq);
+        if (!ShouldIgnoreControlEvents)
+            Controller.SetLowPassFrequency(freq);
     }
 
     private void OnStartStopClicked(object? sender, RoutedEventArgs e)
     {
-        if (Engine.IsRunning)
+        if (Controller.GetState().IsRunning)
             StopEngine();
         else
             StartEngine();
@@ -225,40 +184,18 @@ public partial class MainWindow : Window
 
     private void StartEngine()
     {
-        try
-        {
-            Engine.SetHeadphoneDevice(GetSelectedDevice(ComboPrimaryDevice));
-            Engine.SetSubDevice(GetSelectedDevice(ComboSubDevice));
-            Engine.SetHeadphoneDelayMs((int)SliderPrimaryLatency.Value);
-            Engine.SetSubDelayMs((int)SliderSubLatency.Value);
-            Engine.SetLowPassFrequency((float)SliderLowPass.Value);
+        if (Controller.GetState().IsRunning)
+            return;
 
-            Engine.Start();
-
-            ButtonStartStop.Content = "Stop";
-            ButtonStartStop.Background = StopBrush;
-            TextStatus.Text = "Running";
-            TextStatus.Foreground = RunningBrush;
-
-            SetControlsEnabled(false);
-        }
-        catch (Exception ex)
-        {
-            TextStatus.Text = $"Error: {ex.Message}";
-            TextStatus.Foreground = ErrorBrush;
-        }
+        Controller.Start();
     }
 
     private void StopEngine()
     {
-        Engine.Stop();
+        if (!Controller.GetState().IsRunning)
+            return;
 
-        ButtonStartStop.Content = "Start";
-        ButtonStartStop.Background = StartBrush;
-        TextStatus.Text = "Stopped";
-        TextStatus.Foreground = DimBrush;
-
-        SetControlsEnabled(true);
+        Controller.Stop();
     }
 
     private void SetControlsEnabled(bool enabled)
@@ -273,7 +210,12 @@ public partial class MainWindow : Window
 
     // ── Engine events (come from background thread) ─────────
 
-    private void OnEngineError(object? sender, string message)
+    private void OnEngineStateChanged(object? sender, AudioEngineStateChangedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(() => ApplyEngineState(e.State));
+    }
+
+    private void OnControllerWarning(object? sender, string message)
     {
         Dispatcher.BeginInvoke(() =>
         {
@@ -282,29 +224,120 @@ public partial class MainWindow : Window
         });
     }
 
-    private void OnEngineStopped(object? sender, EventArgs e)
-    {
-        Dispatcher.BeginInvoke(() =>
-        {
-            ButtonStartStop.Content = "Start";
-            ButtonStartStop.Background = StartBrush;
+    // ── Cleanup ─────────────────────────────────────────────
 
-            if (TextStatus.Foreground is SolidColorBrush brush &&
-                brush.Color != ErrorBrush.Color)
+    public void ShowFromTray()
+    {
+        ShowInTaskbar = true;
+
+        if (!IsVisible)
+            Show();
+
+        WindowState = WindowState.Normal;
+        Activate();
+        Topmost = true;
+        Topmost = false;
+        Focus();
+    }
+
+    public void RequestExit()
+    {
+        AllowClose = true;
+        Close();
+    }
+
+    private void OnWindowStateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized)
+            HideToTray();
+    }
+
+    private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (!AllowClose)
+        {
+            e.Cancel = true;
+            HideToTray();
+        }
+    }
+
+    private void ApplyEngineState(AudioEngineState state)
+    {
+        ShouldIgnoreControlEvents = true;
+        try
+        {
+            SelectDeviceById(ComboPrimaryDevice, state.HeadphoneDeviceId);
+            SelectDeviceById(ComboSubDevice, state.SubDeviceId);
+
+            ApplySliderState(SliderPrimaryLatency, TextPrimaryLatencyValue, state.HeadphoneDelayMs, " ms");
+
+            int primaryVolume = ToPercent(state.HeadphoneVolume, (int)SliderPrimaryVolume.Value);
+            ApplySliderState(SliderPrimaryVolume, TextPrimaryVolumeValue, primaryVolume, "%");
+
+            ApplySliderState(SliderSubLatency, TextSubLatencyValue, state.SubDelayMs, " ms");
+
+            int subVolume = ToPercent(state.SubVolume, (int)SliderSubVolume.Value);
+            ApplySliderState(SliderSubVolume, TextSubVolumeValue, subVolume, "%");
+
+            int lowPass = (int)Math.Round(state.LowPassFrequency);
+            ApplySliderState(SliderLowPass, TextLowPassValue, lowPass, " Hz");
+
+            ButtonStartStop.Content = state.IsRunning ? "Stop" : "Start";
+            ButtonStartStop.Background = state.IsRunning ? StopBrush : StartBrush;
+
+            if (!string.IsNullOrWhiteSpace(state.LastErrorMessage))
+            {
+                TextStatus.Text = $"Error: {state.LastErrorMessage}";
+                TextStatus.Foreground = ErrorBrush;
+            }
+            else if (state.IsRunning)
+            {
+                TextStatus.Text = "Running";
+                TextStatus.Foreground = RunningBrush;
+            }
+            else
             {
                 TextStatus.Text = "Stopped";
                 TextStatus.Foreground = DimBrush;
             }
 
-            SetControlsEnabled(true);
-        });
+            SetControlsEnabled(!state.IsRunning);
+        }
+        finally
+        {
+            ShouldIgnoreControlEvents = false;
+        }
     }
 
-    // ── Cleanup ─────────────────────────────────────────────
-
-    private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    private void SelectDeviceById(WpfComboBox combo, string? deviceId)
     {
-        Engine.Dispose();
-        DeviceManager.Dispose();
+        if (string.IsNullOrWhiteSpace(deviceId))
+            return;
+
+        int idx = Devices.FindIndex(device => device.Id == deviceId);
+        if (idx >= 0 && combo.SelectedIndex != idx)
+            combo.SelectedIndex = idx;
+    }
+
+    private void HideToTray()
+    {
+        ShowInTaskbar = false;
+        Hide();
+    }
+
+    private static void ApplySliderState(Slider slider, TextBlock textBlock, int value, string suffix)
+    {
+        if (!slider.IsMouseCaptureWithin)
+            slider.Value = value;
+
+        textBlock.Text = $"{value}{suffix}";
+    }
+
+    private static int ToPercent(float scalar, int fallback)
+    {
+        if (scalar < 0)
+            return fallback;
+
+        return (int)Math.Round(Math.Clamp(scalar, 0f, 1f) * 100f);
     }
 }
