@@ -109,12 +109,12 @@ public sealed class AudioDeviceManager : IDisposable
     public static bool IsVirtualDevice(MMDevice device)
     {
         // If there's something missing here, open a PR
-        if (device.FriendlyName.ToLower().Contains("Steam Streaming")) return true;
-        if (device.FriendlyName.ToLower().Contains("Virtual")) return true;
-        if (device.FriendlyName.ToLower().Contains("AMD Streaming Audio Device")) return true;
-        if (device.FriendlyName.ToLower().Contains("NVIDIA Broadcast")) return true;
-        if (device.FriendlyName.ToLower().Contains("VB-Audio")) return true;
-        if (device.FriendlyName.ToLower().Contains("VoiceMeeter")) return true;
+        if (device.FriendlyName.ToLower().Contains("steam streaming")) return true;
+        if (device.FriendlyName.ToLower().Contains("virtual")) return true;
+        if (device.FriendlyName.ToLower().Contains("amd streaming audio device")) return true;
+        if (device.FriendlyName.ToLower().Contains("nvidia Broadcast")) return true;
+        if (device.FriendlyName.ToLower().Contains("vb-audio")) return true;
+        if (device.FriendlyName.ToLower().Contains("voicemeeter")) return true;
 
         return false;
     }
