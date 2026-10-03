@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=BassRouter
+GenericName=Audio Router
+Comment=Route treble to headphones and bass to a subwoofer
+Exec=BassRouter
+Icon=bassrouter
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;
+Keywords=audio;subwoofer;headphones;bass;pipewire;
+StartupWMClass=bassrouter

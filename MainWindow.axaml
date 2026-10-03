@@ -1,0 +1,105 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BassRouter.MainWindow"
+        Title="BassRouter"
+        Icon="/Resources/Icon.png"
+        Width="400"
+        SizeToContent="Height"
+        CanResize="False"
+        CanMaximize="False"
+        WindowStartupLocation="CenterScreen"
+        WindowDecorations="None"
+        Background="Transparent">
+
+    <StackPanel Margin="0">
+
+        <!--  Custom Titlebar (drag to move)  -->
+        <Border x:Name="TitleBar" Padding="18,12,10,8" Background="#3C464646">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Orientation="Horizontal">
+                    <Image Width="32" Height="32" Source="/Resources/Icon.png" Margin="0,0,4,0" VerticalAlignment="Center" />
+                    <TextBlock Text="BassRouter" FontSize="28" FontWeight="Medium" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Top">
+                    <Button x:Name="ButtonMinimize" Theme="{StaticResource CaptionButton}" ToolTip.Tip="Minimize">
+                        <Path Data="M0,0 L10,0" Stroke="{StaticResource TextBrush}" StrokeThickness="1" />
+                    </Button>
+                    <Button x:Name="ButtonClose" Classes="close" Theme="{StaticResource CaptionButton}" ToolTip.Tip="Close">
+                        <Path Data="M0,0 L10,10 M10,0 L0,10" Stroke="{StaticResource TextBrush}" StrokeThickness="1" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <StackPanel Background="{StaticResource ContentBrush}" Margin="0">
+
+            <!-- PRIMARY AUDIO OUTPUT -->
+            <Border Classes="card" Margin="14,14,14,0">
+                <StackPanel>
+                    <TextBlock Classes="cardTitle" Text="Primary Audio Output" />
+
+                    <TextBlock Classes="label" Text="Device" Margin="0,0,0,4" />
+                    <ComboBox x:Name="ComboPrimaryDevice" />
+
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                        <TextBlock Classes="label" Text="Artificial Latency" />
+                        <TextBlock x:Name="TextPrimaryLatencyValue" Classes="value" Grid.Column="1" Text="0 ms" />
+                    </Grid>
+                    <Slider x:Name="SliderPrimaryLatency" Minimum="0" Maximum="1000" Value="0" />
+
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                        <TextBlock Classes="label" Text="Volume" />
+                        <TextBlock x:Name="TextPrimaryVolumeValue" Classes="value" Grid.Column="1" Text="100%" />
+                    </Grid>
+                    <Slider x:Name="SliderPrimaryVolume" Minimum="0" Maximum="100" Value="100" />
+                </StackPanel>
+            </Border>
+
+            <!-- SUBWOOFER AUDIO OUTPUT -->
+            <Border Classes="card" Margin="14,10,14,0">
+                <StackPanel>
+                    <TextBlock Classes="cardTitle" Text="Subwoofer Audio Output" />
+
+                    <TextBlock Classes="label" Text="Device" Margin="0,0,0,4" />
+                    <ComboBox x:Name="ComboSubDevice" />
+
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                        <TextBlock Classes="label" Text="Artificial Latency" />
+                        <TextBlock x:Name="TextSubLatencyValue" Classes="value" Grid.Column="1" Text="0 ms" />
+                    </Grid>
+                    <Slider x:Name="SliderSubLatency" Minimum="0" Maximum="5000" Value="0" />
+
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                        <TextBlock Classes="label" Text="Volume" />
+                        <TextBlock x:Name="TextSubVolumeValue" Classes="value" Grid.Column="1" Text="100%" />
+                    </Grid>
+                    <Slider x:Name="SliderSubVolume" Minimum="0" Maximum="100" Value="100" />
+
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                        <TextBlock Classes="label" Text="Low Pass Frequency" />
+                        <TextBlock x:Name="TextLowPassValue" Classes="value" Grid.Column="1" Text="120 Hz" />
+                    </Grid>
+                    <Slider x:Name="SliderLowPass" Minimum="10" Maximum="300" Value="120" />
+                </StackPanel>
+            </Border>
+
+            <!-- BOTTOM BAR -->
+            <Grid ColumnDefinitions="*,Auto" Margin="14,14">
+                <TextBlock x:Name="TextStatus"
+                           Text="Stopped"
+                           FontSize="13"
+                           TextWrapping="Wrap"
+                           Margin="0,0,10,0"
+                           VerticalAlignment="Center" />
+
+                <Button x:Name="ButtonStartStop"
+                        Grid.Column="1"
+                        Content="Start"
+                        Background="#0A7A3E"
+                        VerticalAlignment="Center"
+                        Theme="{StaticResource StartStopButton}" />
+            </Grid>
+        </StackPanel>
+    </StackPanel>
+</Window>

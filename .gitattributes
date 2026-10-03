@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Linux scripts and desktop entries break with CRLF line endings
+*.sh text eol=lf
+*.desktop text eol=lf

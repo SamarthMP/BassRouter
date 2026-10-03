@@ -1,4 +1,3 @@
-using NAudio.CoreAudioApi;
 using System.Collections.Concurrent;
 using System.Runtime.ExceptionServices;
 
@@ -6,8 +5,7 @@ namespace BassRouter.Audio;
 
 public sealed class AudioEngineController : IDisposable
 {
-    private readonly AudioDeviceManager DeviceManager;
-    private readonly AudioEngine Engine;
+    private readonly IAudioBackend Backend;
     private readonly AudioEngineConfigStore ConfigStore;
     private readonly BlockingCollection<Action> WorkQueue = new();
     private readonly Task WorkerTask;
@@ -39,8 +37,7 @@ public sealed class AudioEngineController : IDisposable
 
     public AudioEngineController()
     {
-        DeviceManager = new AudioDeviceManager();
-        Engine = new AudioEngine();
+        Backend = AudioBackend.Create();
         ConfigStore = new AudioEngineConfigStore();
         AdjustmentTimer = new System.Threading.Timer(_ => FlushPendingAdjustments(), null, Timeout.Infinite, Timeout.Infinite);
         SaveTimer = new System.Threading.Timer(_ => PersistConfig(), null, Timeout.Infinite, Timeout.Infinite);
@@ -54,12 +51,12 @@ public sealed class AudioEngineController : IDisposable
         RefreshCachedDevices();
         CurrentConfig = ConfigStore.Load();
         InvokeOnWorker(() => ApplyConfig(CurrentConfig));
-        CurrentState = InvokeOnWorker(() => Engine.GetState());
+        CurrentState = InvokeOnWorker(() => Backend.GetState());
 
-        DeviceManager.DevicesChanged += OnDevicesChanged;
-        DeviceManager.DefaultDeviceBecameNonVirtual += OnDefaultDeviceBecameNonVirtual;
-        Engine.StateChanged += OnEngineStateChanged;
-        Engine.Error += OnEngineError;
+        Backend.DevicesChanged += OnDevicesChanged;
+        Backend.StopRequested += OnStopRequested;
+        Backend.StateChanged += OnEngineStateChanged;
+        Backend.Error += OnEngineError;
     }
 
     public IReadOnlyList<AudioOutputDevice> GetOutputDevices()
@@ -80,12 +77,12 @@ public sealed class AudioEngineController : IDisposable
 
     public void SetHeadphoneDeviceById(string? deviceId)
     {
-        Enqueue(() => Engine.SetHeadphoneDevice(GetDevice(deviceId)));
+        Enqueue(() => Backend.SetHeadphoneDevice(deviceId));
     }
 
     public void SetSubDeviceById(string? deviceId)
     {
-        Enqueue(() => Engine.SetSubDevice(GetDevice(deviceId)));
+        Enqueue(() => Backend.SetSubDevice(deviceId));
     }
 
     public void SetHeadphoneDelayMs(int milliseconds)
@@ -146,7 +143,7 @@ public sealed class AudioEngineController : IDisposable
 
     public void Stop()
     {
-        Enqueue(() => Engine.Stop());
+        Enqueue(() => Backend.Stop());
     }
 
     public void ToggleRunning()
@@ -154,8 +151,8 @@ public sealed class AudioEngineController : IDisposable
         FlushPendingAdjustments();
         Enqueue(() =>
         {
-            if (Engine.IsRunning)
-                Engine.Stop();
+            if (Backend.IsRunning)
+                Backend.Stop();
             else
                 StartCore();
         });
@@ -168,10 +165,10 @@ public sealed class AudioEngineController : IDisposable
 
         Disposed = true;
 
-        DeviceManager.DevicesChanged -= OnDevicesChanged;
-        DeviceManager.DefaultDeviceBecameNonVirtual -= OnDefaultDeviceBecameNonVirtual;
-        Engine.StateChanged -= OnEngineStateChanged;
-        Engine.Error -= OnEngineError;
+        Backend.DevicesChanged -= OnDevicesChanged;
+        Backend.StopRequested -= OnStopRequested;
+        Backend.StateChanged -= OnEngineStateChanged;
+        Backend.Error -= OnEngineError;
 
         WorkQueue.CompleteAdding();
         WorkerTask.Wait(TimeSpan.FromSeconds(2));
@@ -182,13 +179,7 @@ public sealed class AudioEngineController : IDisposable
         SaveTimer.Dispose();
         WorkQueue.Dispose();
 
-        Engine.Dispose();
-        DeviceManager.Dispose();
-    }
-
-    private MMDevice? GetDevice(string? deviceId)
-    {
-        return string.IsNullOrWhiteSpace(deviceId) ? null : DeviceManager.GetDeviceById(deviceId);
+        Backend.Dispose();
     }
 
     private void OnDevicesChanged(object? sender, EventArgs e)
@@ -197,12 +188,15 @@ public sealed class AudioEngineController : IDisposable
         DevicesChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void OnDefaultDeviceBecameNonVirtual(object? sender, EventArgs e)
+    private void OnStopRequested(object? sender, string message)
     {
         Enqueue(() =>
         {
-            Engine.Stop();
-            Warning?.Invoke(this, "Default output device changed. Audio routing has been stopped.");
+            if (!Backend.IsRunning)
+                return;
+
+            Backend.Stop();
+            Warning?.Invoke(this, message);
         });
     }
 
@@ -260,24 +254,7 @@ public sealed class AudioEngineController : IDisposable
 
     private void StartCore()
     {
-        AudioOutputDevice? virtualDevice = DeviceManager.GetFirstVirtualOutputDevice();
-        if (virtualDevice == null)
-        {
-            Warning?.Invoke(this, "No virtual audio output device was found. Start aborted.");
-            return;
-        }
-
-        try
-        {
-            DeviceManager.SetDefaultRenderDevice(virtualDevice.Id);
-        }
-        catch (Exception ex)
-        {
-            Warning?.Invoke(this, $"Failed to switch default output to {virtualDevice.Name}: {ex.Message}");
-            return;
-        }
-
-        Engine.Start();
+        Backend.Start();
     }
 
     private void ScheduleAdjustment(Action markDirty)
@@ -335,28 +312,25 @@ public sealed class AudioEngineController : IDisposable
         Enqueue(() =>
         {
             if (applyHeadphoneDelay)
-                Engine.SetHeadphoneDelayMs(headphoneDelayMs);
+                Backend.SetHeadphoneDelayMs(headphoneDelayMs);
 
             if (applySubDelay)
-                Engine.SetSubDelayMs(subDelayMs);
+                Backend.SetSubDelayMs(subDelayMs);
 
             if (applyLowPassFrequency)
-                Engine.SetLowPassFrequency(lowPassFrequency);
+                Backend.SetLowPassFrequency(lowPassFrequency);
 
             if (applyHeadphoneVolume)
-                Engine.SetHeadphoneVolume(headphoneVolume);
+                Backend.SetHeadphoneVolume(headphoneVolume);
 
             if (applySubVolume)
-                Engine.SetSubVolume(subVolume);
+                Backend.SetSubVolume(subVolume);
         });
     }
 
     private void RefreshCachedDevices()
     {
-        AudioOutputDevice[] devices = DeviceManager
-            .GetOutputDevices()
-            .Select(device => new AudioOutputDevice(device.ID, device.FriendlyName))
-            .ToArray();
+        AudioOutputDevice[] devices = Backend.GetOutputDevices().ToArray();
 
         lock (DevicesLock)
         {
@@ -366,13 +340,13 @@ public sealed class AudioEngineController : IDisposable
 
     private void ApplyConfig(AudioEngineConfig config)
     {
-        Engine.SetHeadphoneDevice(GetDevice(config.HeadphoneDeviceId));
-        Engine.SetSubDevice(GetDevice(config.SubDeviceId));
-        Engine.SetHeadphoneDelayMs(config.HeadphoneDelayMs);
-        Engine.SetSubDelayMs(config.SubDelayMs);
-        Engine.SetLowPassFrequency(config.LowPassFrequency);
-        Engine.SetHeadphoneVolume(config.HeadphoneVolume);
-        Engine.SetSubVolume(config.SubVolume);
+        Backend.SetHeadphoneDevice(config.HeadphoneDeviceId);
+        Backend.SetSubDevice(config.SubDeviceId);
+        Backend.SetHeadphoneDelayMs(config.HeadphoneDelayMs);
+        Backend.SetSubDelayMs(config.SubDelayMs);
+        Backend.SetLowPassFrequency(config.LowPassFrequency);
+        Backend.SetHeadphoneVolume(config.HeadphoneVolume);
+        Backend.SetSubVolume(config.SubVolume);
     }
 
     private void UpdateConfig(AudioEngineState state)

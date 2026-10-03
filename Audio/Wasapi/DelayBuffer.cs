@@ -1,4 +1,4 @@
-namespace BassRouter.Audio;
+namespace BassRouter.Audio.Wasapi;
 
 /// <summary>
 /// System for delaying audio playback by offsetting a buffer

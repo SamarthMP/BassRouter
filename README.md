@@ -1,6 +1,6 @@
 # BassRouter
 
-Simple windows utility to route audio between headphones and a subwoofer.
+Simple Windows and Linux utility to route audio between headphones and a subwoofer.
 
 ## Why this exists
 
@@ -16,24 +16,59 @@ Simple windows utility to route audio between headphones and a subwoofer.
 
 ## Requirements
 
+### Windows
+
 You need *some sort* of kernel-level virtual audio driver. I just use the steam streaming speaker driver but it should support anything.
 
 The reason this util doesn't come with it's own drivers is because you need a special EV certificate to sign them. So we just need to piggyback off an existing driver unfortunately.
 
+### Linux
+
+- [PipeWire](https://pipewire.org) with WirePlumber. This is the default audio setup on most modern distros (Fedora, Ubuntu 24.04+, Debian 12+, Linux Mint 22+, Arch, etc). If `pactl info` says `PulseAudio (on PipeWire ...)` you're good. Plain PulseAudio without PipeWire isn't supported.
+- The .NET 10 runtime (`dotnet-runtime-10.0` on most distros).
+
+No virtual driver needed, BassRouter creates its own virtual output device while it's running.
+
+## Installing on Linux
+
+Download the `linux-x64` (or `linux-arm64`) tarball from the releases page, extract it and run:
+
+```sh
+./install.sh
+```
+
+This installs BassRouter for your user and adds it to your app menu. Run `./install.sh --uninstall` to remove it.
+
+To build it yourself instead:
+
+```sh
+dotnet run -c Release
+```
+
+### How it works on Linux
+
+When you press start, BassRouter creates a virtual `BassRouter` output device, makes it the default, and loads two PipeWire filter chains (the same mechanism EasyEffects uses) that copy its audio to your headphones and a low passed version to your subwoofer. When you stop it, the previous default device is restored.
+
+Since everything runs inside PipeWire's audio graph, both devices are kept in sync automatically even if they have different sample rates or clocks.
+
+The volume sliders control BassRouter's own levels for each output. Your normal system volume controls the `BassRouter` device, so it works as a master volume for both.
+
+The window hides to the system tray when closed. If your desktop doesn't have a tray (e.g. GNOME without the AppIndicator extension), closing the window quits instead.
+
 ## Limitations
 
-- Your headphones and speakers need to have the same sample rate otherwise you might get some artifacting.
+- Your headphones and speakers need to have the same sample rate otherwise you might get some artifacting (Windows only, PipeWire handles this on Linux).
 - Enabling spacial audio like windows sonic or dolby atmos might cause issues.
 
 ## Release Automation
 
 Pushing to the `production` branch triggers [.github/workflows/production-release.yml](.github/workflows/production-release.yml), which:
 
-- Builds release packages for `win-x64` and `win-arm64`
+- Builds release packages for `win-x64`, `win-arm64`, `linux-x64` and `linux-arm64`
 - Publishes framework-dependent output for each runtime
 - Signs `BassRouter.exe` with the certificate stored in GitHub Actions secrets
 - Creates a GitHub Release tagged as `v<Version>` from `BassRouter.csproj`
-- Uploads both zip files to that release
+- Uploads the Windows zip files and Linux tarballs to that release
 
 Required repository secrets:
 

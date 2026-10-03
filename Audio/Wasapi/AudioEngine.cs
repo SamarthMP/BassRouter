@@ -2,12 +2,14 @@ using NAudio.CoreAudioApi;
 using NAudio.Dsp;
 using NAudio.Wave;
 using System.Runtime.ExceptionServices;
+using System.Runtime.Versioning;
 
-namespace BassRouter.Audio;
+namespace BassRouter.Audio.Wasapi;
 
 /// <summary>
 /// Captures system audio via WASAPI loopback and routes it to a primary output and a lowpassed subwoofer output.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class AudioEngine : IDisposable
 {
     private WasapiLoopbackCapture? Capture;

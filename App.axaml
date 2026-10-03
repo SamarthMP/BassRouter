@@ -1,0 +1,223 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="BassRouter.App"
+             Name="BassRouter"
+             RequestedThemeVariant="Dark">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Accent Colors -->
+            <SolidColorBrush x:Key="CardBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="CardBorderBrush" Color="#433E46" />
+            <SolidColorBrush x:Key="TextBrush" Color="#F1ECF3" />
+            <SolidColorBrush x:Key="DimTextBrush" Color="#F1ECF3" />
+            <SolidColorBrush x:Key="ValueBrush" Color="#F0C050" />
+            <SolidColorBrush x:Key="ContentBrush" Color="#1D1E20" />
+            <SolidColorBrush x:Key="TrackBrush" Color="#2F2F31" />
+            <SolidColorBrush x:Key="AccentBrush" Color="{DynamicResource SystemAccentColorLight1}" />
+
+            <!-- Fluent ComboBox overrides -->
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="Transparent" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="Transparent" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundDisabled" Color="Transparent" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="Transparent" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#433E46" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled" Color="#433E46" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="{DynamicResource SystemAccentColorLight1}" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="{DynamicResource SystemAccentColorLight1}" />
+            <SolidColorBrush x:Key="ComboBoxForeground" Color="#F1ECF3" />
+            <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#F1ECF3" />
+            <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#F1ECF3" />
+            <SolidColorBrush x:Key="ComboBoxDropDownGlyphForegroundDisabled" Color="#F1ECF3" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#1D1E20" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#433E46" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#433E46" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#433E46" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="{DynamicResource SystemAccentColorLight1}" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="{DynamicResource SystemAccentColorLight1}" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="{DynamicResource SystemAccentColorLight1}" />
+            <SolidColorBrush x:Key="ComboBoxItemForegroundPointerOver" Color="#F1ECF3" />
+            <SolidColorBrush x:Key="ComboBoxItemForegroundSelected" Color="#F1ECF3" />
+            <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver" Color="#F1ECF3" />
+
+            <!-- Slider -->
+            <ControlTheme x:Key="SliderFillButton" TargetType="RepeatButton">
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Grid Background="Transparent">
+                            <Border Height="2" CornerRadius="2" Background="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter>
+            </ControlTheme>
+
+            <ControlTheme x:Key="SliderEmptyButton" TargetType="RepeatButton">
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Background="Transparent" />
+                    </ControlTemplate>
+                </Setter>
+            </ControlTheme>
+
+            <ControlTheme x:Key="SliderThumb" TargetType="Thumb">
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Panel Background="Transparent">
+                            <Ellipse Name="ThumbDot" Width="12" Height="12" Fill="{StaticResource TextBrush}" />
+                        </Panel>
+                    </ControlTemplate>
+                </Setter>
+
+                <Style Selector="^:pointerover /template/ Ellipse#ThumbDot">
+                    <Setter Property="Width" Value="18" />
+                    <Setter Property="Height" Value="18" />
+                </Style>
+
+                <Style Selector="^:pressed /template/ Ellipse#ThumbDot">
+                    <Setter Property="Width" Value="18" />
+                    <Setter Property="Height" Value="18" />
+                </Style>
+            </ControlTheme>
+
+            <ControlTheme x:Key="DarkSlider" TargetType="Slider">
+                <Setter Property="Height" Value="24" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Grid VerticalAlignment="Center" Background="Transparent">
+                            <Border Height="3" CornerRadius="2" Background="{StaticResource TrackBrush}" VerticalAlignment="Center" />
+                            <Track Name="PART_Track"
+                                   Minimum="{TemplateBinding Minimum}"
+                                   Maximum="{TemplateBinding Maximum}"
+                                   Value="{TemplateBinding Value, Mode=TwoWay}"
+                                   IsDirectionReversed="{TemplateBinding IsDirectionReversed}"
+                                   Orientation="Horizontal">
+                                <Track.DecreaseButton>
+                                    <RepeatButton Name="PART_DecreaseButton" Theme="{StaticResource SliderFillButton}" Focusable="False" />
+                                </Track.DecreaseButton>
+                                <Track.IncreaseButton>
+                                    <RepeatButton Name="PART_IncreaseButton" Theme="{StaticResource SliderEmptyButton}" Focusable="False" />
+                                </Track.IncreaseButton>
+                                <Thumb Name="thumb" Width="18" Height="18" Theme="{StaticResource SliderThumb}" />
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter>
+            </ControlTheme>
+
+            <!-- Buttons -->
+            <ControlTheme x:Key="StartStopButton" TargetType="Button">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Name="Bg" Background="{TemplateBinding Background}" CornerRadius="4" Padding="24,8">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              Foreground="{TemplateBinding Foreground}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+
+                <Style Selector="^:pointerover /template/ Border#Bg">
+                    <Setter Property="Opacity" Value="0.85" />
+                </Style>
+
+                <Style Selector="^:pressed /template/ Border#Bg">
+                    <Setter Property="Opacity" Value="0.7" />
+                </Style>
+            </ControlTheme>
+
+            <ControlTheme x:Key="CaptionButton" TargetType="Button">
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Name="Bg" Background="{TemplateBinding Background}" CornerRadius="4">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              Foreground="{TemplateBinding Foreground}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+
+                <Style Selector="^:pointerover /template/ Border#Bg">
+                    <Setter Property="Background" Value="#26FFFFFF" />
+                </Style>
+
+                <Style Selector="^:pressed /template/ Border#Bg">
+                    <Setter Property="Background" Value="#1AFFFFFF" />
+                </Style>
+
+                <Style Selector="^.close:pointerover /template/ Border#Bg">
+                    <Setter Property="Background" Value="#C42B1C" />
+                </Style>
+            </ControlTheme>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <!-- Fonts (TopLevel covers windows and popups such as combo box dropdowns) -->
+        <Style Selector=":is(TopLevel)">
+            <Setter Property="FontFamily" Value="avares://BassRouter/Resources/Sora.ttf#Sora" />
+        </Style>
+
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="{StaticResource DimTextBrush}" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style Selector="TextBlock.value">
+            <Setter Property="Foreground" Value="{StaticResource ValueBrush}" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style Selector="TextBlock.cardTitle">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{StaticResource CardBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="10" />
+        </Style>
+
+        <!-- ComboBox -->
+        <Style Selector="ComboBox">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+
+        <Style Selector="ComboBox:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+
+        <Style Selector="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="Margin" Value="4,1" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+
+        <Style Selector="Slider">
+            <Setter Property="Theme" Value="{StaticResource DarkSlider}" />
+        </Style>
+    </Application.Styles>
+</Application>

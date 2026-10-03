@@ -1,12 +1,14 @@
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
-namespace BassRouter.Audio;
+namespace BassRouter.Audio.Wasapi;
 
 /// <summary>
 /// Manages audio devices (who could have guessed?)
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class AudioDeviceManager : IDisposable
 {
     private readonly MMDeviceEnumerator Enumerator;

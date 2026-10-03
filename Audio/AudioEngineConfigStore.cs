@@ -14,8 +14,13 @@ public sealed class AudioEngineConfigStore
 
     public AudioEngineConfigStore()
     {
+        // %LOCALAPPDATA% on Windows, $XDG_CONFIG_HOME (~/.config) on Linux
+        Environment.SpecialFolder baseFolder = OperatingSystem.IsWindows()
+            ? Environment.SpecialFolder.LocalApplicationData
+            : Environment.SpecialFolder.ApplicationData;
+
         string appDataDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Environment.GetFolderPath(baseFolder),
             "SamsidParty",
             "BassRouter");
 

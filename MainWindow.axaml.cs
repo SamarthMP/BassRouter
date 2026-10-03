@@ -1,27 +1,36 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Threading;
 using BassRouter.Audio;
 using SamsidParty;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Interop;
-using System.Windows.Media;
-using MediaColor = System.Windows.Media.Color;
-using WpfComboBox = System.Windows.Controls.ComboBox;
 
 namespace BassRouter;
 
 public partial class MainWindow : Window
 {
     private readonly AudioEngineController Controller;
+    private readonly HashSet<Slider> DraggingSliders = new();
     private List<AudioOutputDevice> Devices = new();
     private bool ShouldIgnoreControlEvents;
     private bool AllowClose;
 
-    private static readonly SolidColorBrush StartBrush = new(MediaColor.FromRgb(10, 122, 62));
-    private static readonly SolidColorBrush StopBrush = new(MediaColor.FromRgb(180, 40, 40));
-    private static readonly SolidColorBrush RunningBrush = new(MediaColor.FromRgb(80, 220, 80));
-    private static readonly SolidColorBrush ErrorBrush = new(MediaColor.FromRgb(255, 100, 100));
-    private static readonly SolidColorBrush DimBrush = new(MediaColor.FromRgb(144, 144, 168));
+    private static readonly IBrush StartBrush = new SolidColorBrush(Color.FromRgb(10, 122, 62));
+    private static readonly IBrush StopBrush = new SolidColorBrush(Color.FromRgb(180, 40, 40));
+    private static readonly IBrush RunningBrush = new SolidColorBrush(Color.FromRgb(80, 220, 80));
+    private static readonly IBrush ErrorBrush = new SolidColorBrush(Color.FromRgb(255, 100, 100));
+    private static readonly IBrush DimBrush = new SolidColorBrush(Color.FromRgb(144, 144, 168));
+    private static readonly IBrush TitleBarBlurBrush = new SolidColorBrush(Color.FromArgb(0x3C, 0x46, 0x46, 0x46));
+    private static readonly IBrush TitleBarOpaqueBrush = new SolidColorBrush(Color.FromRgb(0x2A, 0x2B, 0x2E));
 
+    /// <summary>
+    /// Whether a system tray is available. When there isn't one, minimizing and closing behave like a normal window.
+    /// Checked each time since the tray may only show up after the app started (e.g. when autostarted at login).
+    /// </summary>
+    public Func<bool> IsTrayAvailable { get; init; } = () => true;
 
     public MainWindow(AudioEngineController controller)
     {
@@ -29,11 +38,14 @@ public partial class MainWindow : Window
 
         InitializeComponent();
 
-        SourceInitialized += (s, e) =>
+        // Blur behind the title bar, like the WPF version. Falls back to an opaque title bar if unsupported.
+        TransparencyLevelHint = [WindowTransparencyLevel.Blur, WindowTransparencyLevel.AcrylicBlur];
+        UpdateTitleBarBackground();
+
+        Opened += (s, e) =>
         {
-            IntPtr handle = new WindowInteropHelper(this).EnsureHandle();
-            WindowHelpers.FixWindows11Corners(handle);
-            WindowHelpers.SetWindowBackgroundMode(handle, WindowHelpers.WindowBackgroundMode.BlurBehind);
+            if (OperatingSystem.IsWindows() && TryGetPlatformHandle()?.Handle is nint handle)
+                WindowHelpers.FixWindows11Corners(handle);
         };
 
         WireEvents();
@@ -57,10 +69,23 @@ public partial class MainWindow : Window
         SliderSubVolume.ValueChanged += OnSubVolumeChanged;
         SliderLowPass.ValueChanged += OnLowPassChanged;
 
-        ButtonStartStop.Click += OnStartStopClicked;
+        foreach (Slider slider in new[] { SliderPrimaryLatency, SliderPrimaryVolume, SliderSubLatency, SliderSubVolume, SliderLowPass })
+            TrackDragging(slider);
 
-        StateChanged += OnWindowStateChanged;
+        ButtonStartStop.Click += OnStartStopClicked;
+        ButtonMinimize.Click += OnMinimizeClicked;
+        ButtonClose.Click += OnCloseClicked;
+        TitleBar.PointerPressed += OnTitleBarPointerPressed;
+
         Closing += OnWindowClosing;
+    }
+
+    private void TrackDragging(Slider slider)
+    {
+        // The slider handles these events itself, so listen for handled ones too
+        slider.AddHandler(PointerPressedEvent, (_, _) => DraggingSliders.Add(slider), RoutingStrategies.Tunnel, handledEventsToo: true);
+        slider.AddHandler(PointerReleasedEvent, (_, _) => DraggingSliders.Remove(slider), RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+        slider.AddHandler(PointerCaptureLostEvent, (_, _) => DraggingSliders.Remove(slider), RoutingStrategies.Direct | RoutingStrategies.Bubble, handledEventsToo: true);
     }
 
     // ── Device list management ──────────────────────────────
@@ -70,21 +95,30 @@ public partial class MainWindow : Window
         Devices = Controller.GetOutputDevices().ToList();
         AudioEngineState state = Controller.GetState();
 
-        ComboPrimaryDevice.Items.Clear();
-        ComboSubDevice.Items.Clear();
-
-        foreach (var device in Devices)
+        // Clearing the lists briefly deselects everything, which shouldn't be sent to the engine
+        ShouldIgnoreControlEvents = true;
+        try
         {
-            ComboPrimaryDevice.Items.Add(device.Name);
-            ComboSubDevice.Items.Add(device.Name);
+            ComboPrimaryDevice.Items.Clear();
+            ComboSubDevice.Items.Clear();
+
+            foreach (var device in Devices)
+            {
+                ComboPrimaryDevice.Items.Add(device.Name);
+                ComboSubDevice.Items.Add(device.Name);
+            }
+        }
+        finally
+        {
+            ShouldIgnoreControlEvents = false;
         }
 
-        SelectDevice(ComboPrimaryDevice, state.HeadphoneDeviceId, "Headphones");
+        SelectDevice(ComboPrimaryDevice, state.HeadphoneDeviceId, "Headphones", "Headset");
         SelectDevice(ComboSubDevice, state.SubDeviceId, "Speaker", "Subwoofer");
         ApplyEngineState(state);
     }
 
-    private void SelectDevice(WpfComboBox combo, string? previousId, params string[] defaultHints)
+    private void SelectDevice(ComboBox combo, string? previousId, params string[] defaultHints)
     {
         if (previousId != null)
         {
@@ -103,7 +137,7 @@ public partial class MainWindow : Window
             combo.SelectedIndex = 0;
     }
 
-    private string? GetSelectedDeviceId(WpfComboBox combo)
+    private string? GetSelectedDeviceId(ComboBox combo)
     {
         int idx = combo.SelectedIndex;
         return idx >= 0 && idx < Devices.Count ? Devices[idx].Id : null;
@@ -113,7 +147,7 @@ public partial class MainWindow : Window
 
     private void OnDevicesChanged(object? sender, EventArgs e)
     {
-        Dispatcher.BeginInvoke(RefreshDeviceList);
+        Dispatcher.UIThread.Post(RefreshDeviceList);
     }
 
     private void OnPrimaryDeviceChanged(object? sender, SelectionChangedEventArgs e)
@@ -132,7 +166,7 @@ public partial class MainWindow : Window
         Controller.SetSubDeviceById(GetSelectedDeviceId(ComboSubDevice));
     }
 
-    private void OnPrimaryLatencyChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
+    private void OnPrimaryLatencyChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         int ms = (int)SliderPrimaryLatency.Value;
         TextPrimaryLatencyValue.Text = $"{ms} ms";
@@ -140,7 +174,7 @@ public partial class MainWindow : Window
             Controller.SetHeadphoneDelayMs(ms);
     }
 
-    private void OnPrimaryVolumeChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
+    private void OnPrimaryVolumeChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         int pct = (int)SliderPrimaryVolume.Value;
         TextPrimaryVolumeValue.Text = $"{pct}%";
@@ -148,7 +182,7 @@ public partial class MainWindow : Window
             Controller.SetHeadphoneVolume(pct / 100f);
     }
 
-    private void OnSubLatencyChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
+    private void OnSubLatencyChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         int ms = (int)SliderSubLatency.Value;
         TextSubLatencyValue.Text = $"{ms} ms";
@@ -156,7 +190,7 @@ public partial class MainWindow : Window
             Controller.SetSubDelayMs(ms);
     }
 
-    private void OnSubVolumeChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
+    private void OnSubVolumeChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         int pct = (int)SliderSubVolume.Value;
         TextSubVolumeValue.Text = $"{pct}%";
@@ -164,7 +198,7 @@ public partial class MainWindow : Window
             Controller.SetSubVolume(pct / 100f);
     }
 
-    private void OnLowPassChanged(object? sender, RoutedPropertyChangedEventArgs<double> e)
+    private void OnLowPassChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         int freq = (int)SliderLowPass.Value;
         TextLowPassValue.Text = $"{freq} Hz";
@@ -178,6 +212,25 @@ public partial class MainWindow : Window
             StopEngine();
         else
             StartEngine();
+    }
+
+    private void OnMinimizeClicked(object? sender, RoutedEventArgs e)
+    {
+        if (IsTrayAvailable())
+            HideToTray();
+        else
+            WindowState = WindowState.Minimized;
+    }
+
+    private void OnCloseClicked(object? sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            BeginMoveDrag(e);
     }
 
     // ── Start / Stop ────────────────────────────────────────
@@ -200,31 +253,28 @@ public partial class MainWindow : Window
 
     private void SetControlsEnabled(bool enabled)
     {
+        // Reduced opacity when disabled is handled by the ComboBox:disabled style
         ComboPrimaryDevice.IsEnabled = enabled;
         ComboSubDevice.IsEnabled = enabled;
-
-        // Reduce opacity when disabled
-        ComboPrimaryDevice.Opacity = enabled ? 1 : 0.4;
-        ComboSubDevice.Opacity = enabled ? 1 : 0.4;
     }
 
     // ── Engine events (come from background thread) ─────────
 
     private void OnEngineStateChanged(object? sender, AudioEngineStateChangedEventArgs e)
     {
-        Dispatcher.BeginInvoke(() => ApplyEngineState(e.State));
+        Dispatcher.UIThread.Post(() => ApplyEngineState(e.State));
     }
 
     private void OnControllerWarning(object? sender, string message)
     {
-        Dispatcher.BeginInvoke(() =>
+        Dispatcher.UIThread.Post(() =>
         {
             TextStatus.Text = $"Error: {message}";
             TextStatus.Foreground = ErrorBrush;
         });
     }
 
-    // ── Cleanup ─────────────────────────────────────────────
+    // ── Window management ───────────────────────────────────
 
     public void ShowFromTray()
     {
@@ -246,19 +296,32 @@ public partial class MainWindow : Window
         Close();
     }
 
-    private void OnWindowStateChanged(object? sender, EventArgs e)
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
-        if (WindowState == WindowState.Minimized)
+        base.OnPropertyChanged(change);
+
+        if (change.Property == WindowStateProperty && WindowState == WindowState.Minimized && IsTrayAvailable())
             HideToTray();
+        else if (change.Property == ActualTransparencyLevelProperty)
+            UpdateTitleBarBackground();
     }
 
-    private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (!AllowClose)
+        if (!AllowClose && IsTrayAvailable())
         {
             e.Cancel = true;
             HideToTray();
         }
+    }
+
+    private void UpdateTitleBarBackground()
+    {
+        bool hasBlur = ActualTransparencyLevel == WindowTransparencyLevel.Blur ||
+                       ActualTransparencyLevel == WindowTransparencyLevel.AcrylicBlur ||
+                       ActualTransparencyLevel == WindowTransparencyLevel.Mica;
+
+        TitleBar.Background = hasBlur ? TitleBarBlurBrush : TitleBarOpaqueBrush;
     }
 
     private void ApplyEngineState(AudioEngineState state)
@@ -309,7 +372,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void SelectDeviceById(WpfComboBox combo, string? deviceId)
+    private void SelectDeviceById(ComboBox combo, string? deviceId)
     {
         if (string.IsNullOrWhiteSpace(deviceId))
             return;
@@ -325,9 +388,10 @@ public partial class MainWindow : Window
         Hide();
     }
 
-    private static void ApplySliderState(Slider slider, TextBlock textBlock, int value, string suffix)
+    private void ApplySliderState(Slider slider, TextBlock textBlock, int value, string suffix)
     {
-        if (!slider.IsMouseCaptureWithin)
+        // Don't fight the user while they're dragging
+        if (!DraggingSliders.Contains(slider))
             slider.Value = value;
 
         textBlock.Text = $"{value}{suffix}";

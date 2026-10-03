@@ -18,7 +18,7 @@ env:
   PROJECT_NAME: BassRouter
   DOTNET_VERSION: 10.0.x
   CONFIGURATION: Release
-  TARGET_FRAMEWORK: net10.0-windows
+  TARGET_FRAMEWORK: net10.0
 
 jobs:
   resolve-version:
@@ -211,12 +211,71 @@ jobs:
             Remove-Item $env:SIGNING_CERT_PATH -Force
           }
 
+  build-linux-package:
+    name: Build and Package (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    needs: resolve-version
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime:
+          - linux-x64
+          - linux-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish framework-dependent app
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          publish_dir="$GITHUB_WORKSPACE/artifacts/publish/$RUNTIME/$PROJECT_NAME"
+
+          dotnet publish "$PROJECT_FILE" \
+            --configuration "$CONFIGURATION" \
+            --framework "$TARGET_FRAMEWORK" \
+            --runtime "$RUNTIME" \
+            --self-contained false \
+            -p:Version="$VERSION" \
+            -p:DebugType=None \
+            -p:DebugSymbols=false \
+            -o "$publish_dir"
+
+          cp Extra/Linux/bassrouter.desktop Extra/Linux/install.sh "$publish_dir/"
+          cp Resources/Icon.png "$publish_dir/bassrouter.png"
+          chmod +x "$publish_dir/$PROJECT_NAME" "$publish_dir/install.sh"
+
+          echo "PUBLISH_DIR=$publish_dir" >> "$GITHUB_ENV"
+
+      - name: Create tarball
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        run: |
+          # tar keeps the executable bits, which upload-artifact's zip would drop
+          tar -czf "artifacts/$PROJECT_NAME-$RUNTIME-framework-dependent.tar.gz" \
+            -C "$(dirname "$PUBLISH_DIR")" "$(basename "$PUBLISH_DIR")"
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-${{ matrix.runtime }}
+          path: artifacts/BassRouter-${{ matrix.runtime }}-framework-dependent.tar.gz
+          if-no-files-found: error
+
   publish-release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
     needs:
       - resolve-version
       - build-sign-package
+      - build-linux-package
 
     steps:
       - name: Verify release tag does not exist
@@ -243,4 +302,6 @@ jobs:
           name: ${{ needs.resolve-version.outputs.release_name }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
-          files: release-artifacts/*.zip
+          files: |
+            release-artifacts/*.zip
+            release-artifacts/*.tar.gz

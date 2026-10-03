@@ -1,8 +1,8 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Platform;
+using Avalonia.Threading;
 using BassRouter.Audio;
-using System.Drawing;
-using System.Windows;
-using System.Windows.Forms;
-using System.Windows.Threading;
 
 namespace BassRouter;
 
@@ -11,34 +11,43 @@ public sealed class TrayIconController : IDisposable
     private readonly AudioEngineController Controller;
     private readonly Action ShowWindow;
     private readonly Action ExitApplication;
-    private readonly NotifyIcon NotifyIcon;
-    private readonly ContextMenuStrip Menu;
-    private readonly Dispatcher Dispatcher;
+    private readonly Func<nint> GetWindowHandle;
+    private readonly Application Application;
+    private readonly TrayIcon TrayIcon;
+    private readonly NativeMenu Menu;
     private bool Disposed;
 
-    public TrayIconController(AudioEngineController controller, Action showWindow, Action exitApplication)
+    public TrayIconController(
+        Application application,
+        AudioEngineController controller,
+        Action showWindow,
+        Action exitApplication,
+        Func<nint> getWindowHandle)
     {
+        Application = application;
         Controller = controller;
         ShowWindow = showWindow;
         ExitApplication = exitApplication;
-        Dispatcher = System.Windows.Application.Current.Dispatcher;
+        GetWindowHandle = getWindowHandle;
 
-        Menu = new ContextMenuStrip();
-        Menu.Opening += OnMenuOpening;
+        Menu = new NativeMenu();
 
-        NotifyIcon = new NotifyIcon
+        TrayIcon = new TrayIcon
         {
-            Visible = true,
-            Text = "BassRouter",
-            Icon = ResolveTrayIcon()
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://BassRouter/Resources/Icon.png"))),
+            ToolTipText = "BassRouter",
+            Menu = Menu,
+            IsVisible = true
         };
 
-        NotifyIcon.DoubleClick += OnNotifyIconDoubleClick;
-        NotifyIcon.MouseUp += OnNotifyIconMouseUp;
+        TrayIcon.Clicked += OnTrayIconClicked;
+        TrayIcon.SetIcons(Application, [TrayIcon]);
 
         Controller.StateChanged += OnControllerStateChanged;
+        Controller.DevicesChanged += OnControllerDevicesChanged;
         Controller.Warning += OnControllerWarning;
 
+        RebuildMenu();
         UpdateTrayText(Controller.GetState());
     }
 
@@ -50,95 +59,92 @@ public sealed class TrayIconController : IDisposable
         Disposed = true;
 
         Controller.StateChanged -= OnControllerStateChanged;
+        Controller.DevicesChanged -= OnControllerDevicesChanged;
         Controller.Warning -= OnControllerWarning;
 
-        NotifyIcon.DoubleClick -= OnNotifyIconDoubleClick;
-        NotifyIcon.MouseUp -= OnNotifyIconMouseUp;
-        NotifyIcon.Visible = false;
-        NotifyIcon.Dispose();
-        Menu.Dispose();
+        TrayIcon.Clicked -= OnTrayIconClicked;
+        TrayIcon.IsVisible = false;
+        TrayIcon.SetIcons(Application, []);
+        TrayIcon.Dispose();
+        DesktopIntegration.Cleanup();
     }
 
-    private void OnMenuOpening(object? sender, System.ComponentModel.CancelEventArgs e)
-    {
-        RebuildMenu();
-    }
-
+    /// <summary>
+    /// The menu can't be rebuilt lazily when it opens on every platform, so it's kept up to date instead.
+    /// </summary>
     private void RebuildMenu()
     {
+        if (Disposed)
+            return;
+
         AudioEngineState state = Controller.GetState();
         IReadOnlyList<AudioOutputDevice> devices = Controller.GetOutputDevices();
 
-        Menu.SuspendLayout();
-        try
-        {
-            Menu.Items.Clear();
-            Menu.Items.Add(CreateStatusItem(state));
-            Menu.Items.Add(new ToolStripSeparator());
-            Menu.Items.Add(CreateMenuItem("Open", (_, _) => ShowWindow()));
-            Menu.Items.Add(CreateMenuItem(state.IsRunning ? "Stop" : "Start", (_, _) => ToggleRunning()));
-            Menu.Items.Add(new ToolStripSeparator());
-            Menu.Items.Add(CreateDeviceMenu("Primary Output", devices, state.HeadphoneDeviceId, state.IsRunning, Controller.SetHeadphoneDeviceById));
-            Menu.Items.Add(CreateDeviceMenu("Subwoofer Output", devices, state.SubDeviceId, state.IsRunning, Controller.SetSubDeviceById));
-            Menu.Items.Add(new ToolStripSeparator());
-            Menu.Items.Add(CreateMenuItem("Exit", (_, _) => ExitApplication()));
-        }
-        finally
-        {
-            Menu.ResumeLayout();
-        }
+        Menu.Items.Clear();
+        Menu.Items.Add(CreateStatusItem(state));
+        Menu.Items.Add(new NativeMenuItemSeparator());
+        Menu.Items.Add(CreateMenuItem("Open", ShowWindow));
+        Menu.Items.Add(CreateMenuItem(state.IsRunning ? "Stop" : "Start", ToggleRunning));
+        Menu.Items.Add(new NativeMenuItemSeparator());
+        Menu.Items.Add(CreateDeviceMenu("Primary Output", devices, state.HeadphoneDeviceId, state.IsRunning, Controller.SetHeadphoneDeviceById));
+        Menu.Items.Add(CreateDeviceMenu("Subwoofer Output", devices, state.SubDeviceId, state.IsRunning, Controller.SetSubDeviceById));
+        Menu.Items.Add(new NativeMenuItemSeparator());
+        Menu.Items.Add(CreateMenuItem("Exit", ExitApplication));
     }
 
-    private ToolStripItem CreateStatusItem(AudioEngineState state)
+    private static NativeMenuItem CreateStatusItem(AudioEngineState state)
     {
         string label = state.LastErrorMessage != null
-            ? $"Status: Error"
+            ? "Status: Error"
             : state.IsRunning
                 ? "Status: Running"
                 : "Status: Stopped";
 
-        return new ToolStripMenuItem(label)
+        return new NativeMenuItem(label)
         {
-            Enabled = false
+            IsEnabled = false
         };
     }
 
-    private ToolStripMenuItem CreateDeviceMenu(
+    private static NativeMenuItem CreateDeviceMenu(
         string title,
         IReadOnlyList<AudioOutputDevice> devices,
         string? selectedDeviceId,
         bool isRunning,
         Action<string?> onSelected)
     {
-        var menuItem = new ToolStripMenuItem(title)
+        var submenu = new NativeMenu();
+        var menuItem = new NativeMenuItem(title)
         {
-            Enabled = !isRunning
+            IsEnabled = !isRunning,
+            Menu = submenu
         };
 
         if (devices.Count == 0)
         {
-            menuItem.DropDownItems.Add(new ToolStripMenuItem("No active devices") { Enabled = false });
+            submenu.Items.Add(new NativeMenuItem("No active devices") { IsEnabled = false });
             return menuItem;
         }
 
         foreach (var device in devices)
         {
-            var deviceItem = new ToolStripMenuItem(device.Name)
+            var deviceItem = new NativeMenuItem(device.Name)
             {
-                Checked = device.Id == selectedDeviceId
+                ToggleType = MenuItemToggleType.CheckBox,
+                IsChecked = device.Id == selectedDeviceId
             };
 
             deviceItem.Click += (_, _) => onSelected(device.Id);
-            menuItem.DropDownItems.Add(deviceItem);
+            submenu.Items.Add(deviceItem);
         }
 
         return menuItem;
     }
 
-    private ToolStripMenuItem CreateMenuItem(string label, EventHandler onClick)
+    private static NativeMenuItem CreateMenuItem(string label, Action onClick)
     {
-        var menuItem = new ToolStripMenuItem(label);
-        menuItem.Click += onClick;
+        var menuItem = new NativeMenuItem(label);
+        menuItem.Click += (_, _) => onClick();
         return menuItem;
     }
 
@@ -147,77 +153,45 @@ public sealed class TrayIconController : IDisposable
         Controller.ToggleRunning();
     }
 
-    private void OnNotifyIconDoubleClick(object? sender, EventArgs e)
+    private void OnTrayIconClicked(object? sender, EventArgs e)
     {
         ShowWindow();
     }
 
-    private void OnNotifyIconMouseUp(object? sender, MouseEventArgs e)
-    {
-        if (e.Button != MouseButtons.Right)
-            return;
-
-        if (Dispatcher.CheckAccess())
-            ShowContextMenu();
-        else
-            Dispatcher.BeginInvoke(ShowContextMenu);
-    }
-
     private void OnControllerStateChanged(object? sender, AudioEngineStateChangedEventArgs e)
     {
-        if (Dispatcher.CheckAccess())
+        Dispatcher.UIThread.Post(() =>
+        {
             UpdateTrayText(e.State);
-        else
-            Dispatcher.BeginInvoke(() => UpdateTrayText(e.State));
+            RebuildMenu();
+        });
+    }
+
+    private void OnControllerDevicesChanged(object? sender, EventArgs e)
+    {
+        Dispatcher.UIThread.Post(RebuildMenu);
     }
 
     private void OnControllerWarning(object? sender, string message)
     {
-        if (Dispatcher.CheckAccess())
-            ShowBalloonTip(message);
-        else
-            Dispatcher.BeginInvoke(() => ShowBalloonTip(message));
+        Dispatcher.UIThread.Post(() =>
+        {
+            DesktopIntegration.ShowNotification(message, GetWindowHandle());
+            RebuildMenu();
+        });
     }
 
     private void UpdateTrayText(AudioEngineState state)
     {
+        if (Disposed)
+            return;
+
         string status = state.LastErrorMessage != null
             ? "Error"
             : state.IsRunning
                 ? "Running"
                 : "Stopped";
 
-        NotifyIcon.Text = $"BassRouter ({status})";
-    }
-
-    private void ShowBalloonTip(string message)
-    {
-        NotifyIcon.BalloonTipTitle = "BassRouter";
-        NotifyIcon.BalloonTipText = message;
-        NotifyIcon.BalloonTipIcon = ToolTipIcon.Warning;
-        NotifyIcon.ShowBalloonTip(3000);
-    }
-
-    private void ShowContextMenu()
-    {
-        RebuildMenu();
-        Menu.Show(Cursor.Position);
-    }
-
-    private static Icon ResolveTrayIcon()
-    {
-        try
-        {
-            string? processPath = Environment.ProcessPath;
-            if (!string.IsNullOrWhiteSpace(processPath))
-            {
-                Icon? extracted = Icon.ExtractAssociatedIcon(processPath);
-                if (extracted != null)
-                    return extracted;
-            }
-        }
-        catch { }
-
-        return SystemIcons.Application;
+        TrayIcon.ToolTipText = $"BassRouter ({status})";
     }
 }
