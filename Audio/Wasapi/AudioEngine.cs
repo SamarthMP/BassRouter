@@ -1,3 +1,4 @@
+using BassRouter.Audio.Latency;
 using NAudio.CoreAudioApi;
 using NAudio.Dsp;
 using NAudio.Wave;
@@ -12,6 +13,9 @@ namespace BassRouter.Audio.Wasapi;
 [SupportedOSPlatform("windows")]
 public sealed class AudioEngine : IDisposable
 {
+    private static readonly TimeSpan LatencyTestStartTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan LatencyTestStallTimeout = TimeSpan.FromSeconds(3);
+
     private WasapiLoopbackCapture? Capture;
     private WasapiOut? HeadphoneOut;
     private WasapiOut? SubOut;
@@ -29,6 +33,9 @@ public sealed class AudioEngine : IDisposable
     private readonly object _Lock = new();
     private bool IsDisposed;
     private bool _IsRunning;
+
+    // Replaces the routed audio while latency detection runs
+    private volatile LatencyTestPlayback? LatencyTest;
 
     // Config
     private MMDevice? CaptureDevice;
@@ -297,6 +304,118 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>
+    /// Plays the latency test sound through the running routing paths while recording from a microphone.
+    /// See <see cref="IAudioBackend.RecordLatencyTest"/>.
+    /// </summary>
+    public LatencyTestRecording RecordLatencyTest(MMDevice microphone, LatencyTestSignal signal, CancellationToken cancellationToken)
+    {
+        WaveFormat format;
+        MMDevice captureDevice;
+
+        lock (_Lock)
+        {
+            if (!_IsRunning || Capture == null || CaptureDevice == null)
+                throw new InvalidOperationException("Audio routing isn't running.");
+
+            format = Capture.WaveFormat;
+            captureDevice = CaptureDevice;
+        }
+
+        // The test sound is fed in as loopback audio arrives, so it shares a timeline across both outputs.
+        // Loopback capture only delivers audio while something is playing on the device though, so keep it
+        // playing silence for the duration of the test.
+        using var keepAlive = new WasapiOut(captureDevice, AudioClientShareMode.Shared, false, 50);
+        keepAlive.Init(new SilenceProvider(format));
+        keepAlive.Play();
+
+        TimeSpan maxRecording = TimeSpan.FromSeconds(signal.Duration + signal.RecordingTail + 2 * LatencyTestStartTimeout.TotalSeconds);
+        using var recorder = new MicrophoneRecorder(microphone, maxRecording);
+        recorder.Start();
+
+        // Start recording before playing anything, so the recording catches all of the test sound
+        WaitForLatencyTest(
+            () => recorder.RecordedFrames > 0,
+            "The microphone didn't record anything. Make sure it's connected and apps are allowed to use it.",
+            recorder,
+            cancellationToken);
+
+        // Anything recorded before the test sound starts playing can't contain it
+        int recordingStart = recorder.RecordedFrames;
+        var playback = new LatencyTestPlayback(signal.Render(format.SampleRate));
+        LatencyTest = playback;
+
+        try
+        {
+            WaitForLatencyTest(
+                () => playback.IsStarted,
+                "Couldn't play the test sound through BassRouter.",
+                recorder,
+                cancellationToken);
+
+            int recordingEnd = -1;
+            int lastRecordedFrames = recorder.RecordedFrames;
+            long lastRecordedAt = Environment.TickCount64;
+
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ThrowIfLatencyTestBroken(recorder);
+
+                int recordedFrames = recorder.RecordedFrames;
+                if (recordingEnd < 0 && playback.IsFinished)
+                    recordingEnd = recordedFrames + (int)(signal.RecordingTail * recorder.SampleRate);
+
+                if ((recordingEnd >= 0 && recordedFrames >= recordingEnd) || recorder.IsFull)
+                    break;
+
+                long now = Environment.TickCount64;
+                if (recordedFrames != lastRecordedFrames)
+                {
+                    lastRecordedFrames = recordedFrames;
+                    lastRecordedAt = now;
+                }
+                else if (now - lastRecordedAt > LatencyTestStallTimeout.TotalMilliseconds)
+                {
+                    throw new LatencyDetectionException("The microphone stopped recording during the test.");
+                }
+
+                cancellationToken.WaitHandle.WaitOne(10);
+            }
+        }
+        finally
+        {
+            LatencyTest = null;
+        }
+
+        return new LatencyTestRecording(recorder.Stop(recordingStart), recorder.SampleRate);
+    }
+
+    private void WaitForLatencyTest(Func<bool> condition, string timeoutMessage, MicrophoneRecorder recorder, CancellationToken cancellationToken)
+    {
+        long deadline = Environment.TickCount64 + (long)LatencyTestStartTimeout.TotalMilliseconds;
+
+        while (!condition())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIfLatencyTestBroken(recorder);
+
+            if (Environment.TickCount64 > deadline)
+                throw new LatencyDetectionException(timeoutMessage);
+
+            cancellationToken.WaitHandle.WaitOne(10);
+        }
+    }
+
+    private void ThrowIfLatencyTestBroken(MicrophoneRecorder recorder)
+    {
+        if (!IsRunning)
+            throw new LatencyDetectionException("Audio routing stopped during the test.");
+
+        if (recorder.Error != null)
+            throw new LatencyDetectionException($"The microphone couldn't be used: {recorder.Error.Message}");
+    }
+
+    /// <summary>
     /// Stops routing and releases audio resources.
     /// </summary>
     public void Stop()
@@ -344,8 +463,21 @@ public sealed class AudioEngine : IDisposable
 
             if (lFilter == null || rFilter == null) return;
 
+            LatencyTestPlayback? latencyTest = LatencyTest;
+
             for (int i = 0; i < sampleCount - 1; i += 2)
             {
+                if (latencyTest != null)
+                {
+                    // Play the test sound instead, through the same low pass but without the artificial latency
+                    latencyTest.Read(out float headphoneSample, out float subSample);
+                    headphoneSamples[i] = headphoneSample;
+                    headphoneSamples[i + 1] = headphoneSample;
+                    subSamples[i] = lFilter.Transform(subSample);
+                    subSamples[i + 1] = rFilter.Transform(subSample);
+                    continue;
+                }
+
                 float left = input[i];
                 float right = input[i + 1];
 
@@ -500,5 +632,32 @@ public sealed class AudioEngine : IDisposable
     private void PublishState(AudioEngineState state)
     {
         StateChanged?.Invoke(this, new AudioEngineStateChangedEventArgs(state));
+    }
+
+    /// <summary>
+    /// Steps through the latency test tracks on the capture thread, as loopback audio comes in.
+    /// </summary>
+    private sealed class LatencyTestPlayback(LatencyTestTracks tracks)
+    {
+        private int Position;
+
+        public bool IsStarted => Volatile.Read(ref Position) > 0;
+
+        public bool IsFinished => Volatile.Read(ref Position) >= tracks.Length;
+
+        public void Read(out float headphoneSample, out float subSample)
+        {
+            int position = Position;
+            if (position >= tracks.Length)
+            {
+                headphoneSample = 0f;
+                subSample = 0f;
+                return;
+            }
+
+            headphoneSample = tracks.Headphones[position];
+            subSample = tracks.Subwoofer[position];
+            Volatile.Write(ref Position, position + 1);
+        }
     }
 }

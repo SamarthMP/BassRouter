@@ -1,3 +1,4 @@
+using BassRouter.Audio.Latency;
 using NAudio.CoreAudioApi;
 using System.Runtime.Versioning;
 
@@ -46,6 +47,16 @@ public sealed class WasapiAudioBackend : IAudioBackend
             .ToArray();
     }
 
+    public IReadOnlyList<AudioInputDevice> GetInputDevices()
+    {
+        string? defaultId = DeviceManager.GetDefaultCaptureDevice()?.ID;
+
+        return DeviceManager
+            .GetInputDevices()
+            .Select(device => new AudioInputDevice(device.ID, device.FriendlyName, device.ID == defaultId))
+            .ToArray();
+    }
+
     public AudioEngineState GetState() => Engine.GetState();
 
     public void SetHeadphoneDevice(string? deviceId) => Engine.SetHeadphoneDevice(GetDevice(deviceId));
@@ -80,6 +91,14 @@ public sealed class WasapiAudioBackend : IAudioBackend
     }
 
     public void Stop() => Engine.Stop();
+
+    public LatencyTestRecording RecordLatencyTest(string microphoneId, LatencyTestSignal signal, CancellationToken cancellationToken)
+    {
+        MMDevice microphone = DeviceManager.GetDeviceById(microphoneId)
+            ?? throw new LatencyDetectionException("The selected microphone isn't available anymore.");
+
+        return Engine.RecordLatencyTest(microphone, signal, cancellationToken);
+    }
 
     public void Dispose()
     {

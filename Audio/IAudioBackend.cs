@@ -1,3 +1,4 @@
+using BassRouter.Audio.Latency;
 using BassRouter.Audio.PipeWire;
 using BassRouter.Audio.Wasapi;
 
@@ -66,6 +67,21 @@ public interface IAudioBackend : IDisposable
     /// Stops routing and releases audio resources.
     /// </summary>
     void Stop();
+
+    /// <summary>
+    /// Returns all currently active audio input devices.
+    /// </summary>
+    IReadOnlyList<AudioInputDevice> GetInputDevices();
+
+    /// <summary>
+    /// Plays the test signal while recording from a microphone, and returns the recording.
+    /// <para>
+    /// Routing must be running. Each output's track is played through its routing path, both starting at the same
+    /// moment, without the artificial latency and with the other output silent. The recording starts before the test
+    /// signal and continues for <see cref="LatencyTestSignal.RecordingTail"/> after it.
+    /// </para>
+    /// </summary>
+    LatencyTestRecording RecordLatencyTest(string microphoneId, LatencyTestSignal signal, CancellationToken cancellationToken);
 }
 
 public static class AudioBackend

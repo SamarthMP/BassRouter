@@ -84,6 +84,13 @@
                 </StackPanel>
             </Border>
 
+            <Button x:Name="ButtonDetectLatency"
+                    Content="Detect Latency"
+                    Margin="14,10,14,0"
+                    HorizontalAlignment="Stretch"
+                    Theme="{StaticResource SecondaryButton}"
+                    ToolTip.Tip="Measure which output plays later with a microphone and line them up" />
+
             <!-- BOTTOM BAR -->
             <Grid ColumnDefinitions="*,Auto" Margin="14,14">
                 <TextBlock x:Name="TextStatus"

@@ -129,6 +129,47 @@
                 <Style Selector="^:pressed /template/ Border#Bg">
                     <Setter Property="Opacity" Value="0.7" />
                 </Style>
+
+                <Style Selector="^:disabled /template/ Border#Bg">
+                    <Setter Property="Opacity" Value="0.4" />
+                </Style>
+            </ControlTheme>
+
+            <!-- Outlined like the cards, for actions next to or below a StartStopButton -->
+            <ControlTheme x:Key="SecondaryButton" TargetType="Button">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Name="Bg"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="23,7">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              Foreground="{TemplateBinding Foreground}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+
+                <Style Selector="^:pointerover /template/ Border#Bg">
+                    <Setter Property="Background" Value="#1AFFFFFF" />
+                </Style>
+
+                <Style Selector="^:pressed /template/ Border#Bg">
+                    <Setter Property="Background" Value="#0DFFFFFF" />
+                </Style>
+
+                <Style Selector="^:disabled /template/ Border#Bg">
+                    <Setter Property="Opacity" Value="0.4" />
+                </Style>
             </ControlTheme>
 
             <ControlTheme x:Key="CaptionButton" TargetType="Button">

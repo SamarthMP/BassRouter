@@ -1,3 +1,4 @@
+using BassRouter.Audio.Latency;
 using System.Collections.Concurrent;
 using System.Runtime.ExceptionServices;
 
@@ -15,8 +16,10 @@ public sealed class AudioEngineController : IDisposable
     private readonly object ConfigLock = new();
     private readonly System.Threading.Timer AdjustmentTimer;
     private readonly System.Threading.Timer SaveTimer;
+    private readonly CancellationTokenSource DisposeCancellation = new();
     private AudioEngineState CurrentState;
     private AudioOutputDevice[] CachedDevices = [];
+    private AudioInputDevice[] CachedInputDevices = [];
     private AudioEngineConfig CurrentConfig;
     private int PendingHeadphoneDelayMs;
     private int PendingSubDelayMs;
@@ -64,6 +67,14 @@ public sealed class AudioEngineController : IDisposable
         lock (DevicesLock)
         {
             return CachedDevices;
+        }
+    }
+
+    public IReadOnlyList<AudioInputDevice> GetInputDevices()
+    {
+        lock (DevicesLock)
+        {
+            return CachedInputDevices;
         }
     }
 
@@ -158,12 +169,46 @@ public sealed class AudioEngineController : IDisposable
         });
     }
 
+    /// <summary>
+    /// Measures how much later one output plays than the other using a microphone, then sets the artificial latency
+    /// so they play in sync. Starts routing if it isn't running, since the test plays through it.
+    /// Fails with <see cref="LatencyDetectionException"/> when the measurement didn't work out.
+    /// </summary>
+    public Task<LatencyDetectionResult> DetectLatencyAsync(string microphoneId, CancellationToken cancellationToken)
+    {
+        FlushPendingAdjustments();
+
+        var completion = new TaskCompletionSource<LatencyDetectionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool queued = Enqueue(() =>
+        {
+            try
+            {
+                using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, DisposeCancellation.Token);
+                completion.TrySetResult(DetectLatencyCore(microphoneId, cancellation.Token));
+            }
+            catch (OperationCanceledException)
+            {
+                completion.TrySetCanceled();
+            }
+            catch (Exception ex)
+            {
+                completion.TrySetException(ex);
+            }
+        });
+
+        if (!queued)
+            completion.TrySetCanceled();
+
+        return completion.Task;
+    }
+
     public void Dispose()
     {
         if (Disposed)
             return;
 
         Disposed = true;
+        DisposeCancellation.Cancel();
 
         Backend.DevicesChanged -= OnDevicesChanged;
         Backend.StopRequested -= OnStopRequested;
@@ -178,6 +223,7 @@ public sealed class AudioEngineController : IDisposable
         PersistConfig();
         SaveTimer.Dispose();
         WorkQueue.Dispose();
+        DisposeCancellation.Dispose();
 
         Backend.Dispose();
     }
@@ -221,17 +267,19 @@ public sealed class AudioEngineController : IDisposable
         Warning?.Invoke(this, message);
     }
 
-    private void Enqueue(Action action)
+    private bool Enqueue(Action action)
     {
         if (Disposed || WorkQueue.IsAddingCompleted)
-            return;
+            return false;
 
         try
         {
             WorkQueue.Add(action);
+            return true;
         }
         catch (InvalidOperationException)
         {
+            return false;
         }
     }
 
@@ -255,6 +303,22 @@ public sealed class AudioEngineController : IDisposable
     private void StartCore()
     {
         Backend.Start();
+    }
+
+    private LatencyDetectionResult DetectLatencyCore(string microphoneId, CancellationToken cancellationToken)
+    {
+        LatencyTestSignal signal = LatencyTestSignal.Default;
+
+        if (!Backend.IsRunning)
+            StartCore();
+
+        LatencyTestRecording recording = Backend.RecordLatencyTest(microphoneId, signal, cancellationToken);
+        double offset = LatencyAnalyzer.MeasureOffset(signal, recording);
+
+        LatencyDetectionResult result = LatencyDetectionResult.FromOffset(offset);
+        Backend.SetHeadphoneDelayMs(result.HeadphoneDelayMs);
+        Backend.SetSubDelayMs(result.SubDelayMs);
+        return result;
     }
 
     private void ScheduleAdjustment(Action markDirty)
@@ -331,10 +395,12 @@ public sealed class AudioEngineController : IDisposable
     private void RefreshCachedDevices()
     {
         AudioOutputDevice[] devices = Backend.GetOutputDevices().ToArray();
+        AudioInputDevice[] inputDevices = Backend.GetInputDevices().ToArray();
 
         lock (DevicesLock)
         {
             CachedDevices = devices;
+            CachedInputDevices = inputDevices;
         }
     }
 

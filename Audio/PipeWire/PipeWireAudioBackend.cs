@@ -20,7 +20,7 @@ namespace BassRouter.Audio.PipeWire;
 /// </para>
 /// </summary>
 [SupportedOSPlatform("linux")]
-public sealed unsafe class PipeWireAudioBackend : IAudioBackend
+public sealed unsafe partial class PipeWireAudioBackend : IAudioBackend
 {
     private const string SinkNodeName = "bassrouter_sink";
     private const string SinkDescription = "BassRouter";
@@ -30,6 +30,7 @@ public sealed unsafe class PipeWireAudioBackend : IAudioBackend
     private const string SubOutputNodeName = "bassrouter.subwoofer.output";
     private const string FilterChainModule = "libpipewire-module-filter-chain";
     private const string DefaultSinkKey = "default.audio.sink";
+    private const string DefaultSourceKey = "default.audio.source";
     private const string ConfiguredDefaultSinkKey = "default.configured.audio.sink";
     private const float LowPassQ = 0.7f;
     private static readonly string[] OwnNodeNames = [SinkNodeName, HeadphoneInputNodeName, HeadphoneOutputNodeName, SubInputNodeName, SubOutputNodeName];
@@ -74,6 +75,7 @@ public sealed unsafe class PipeWireAudioBackend : IAudioBackend
     private readonly HashSet<int> CompletedSyncs = new();
     private bool Connected;
     private string? DefaultSinkName;
+    private string? DefaultSourceName;
     private string? ConfiguredDefaultSink;
     private bool Routing;
     private bool RoutingInterrupted;
@@ -167,6 +169,18 @@ public sealed unsafe class PipeWireAudioBackend : IAudioBackend
                 .Where(IsOutputDevice)
                 .OrderBy(node => node.Id)
                 .Select(node => new AudioOutputDevice(node.Name!, node.DisplayName))
+                .ToArray();
+        }
+    }
+
+    public IReadOnlyList<AudioInputDevice> GetInputDevices()
+    {
+        lock (StateLock)
+        {
+            return Nodes.Values
+                .Where(IsInputDevice)
+                .OrderBy(node => node.Id)
+                .Select(node => new AudioInputDevice(node.Name!, node.DisplayName, node.Name == DefaultSourceName))
                 .ToArray();
         }
     }
@@ -468,6 +482,7 @@ public sealed unsafe class PipeWireAudioBackend : IAudioBackend
             Nodes.Clear();
             CompletedSyncs.Clear();
             DefaultSinkName = null;
+            DefaultSourceName = null;
             ConfiguredDefaultSink = null;
             Monitor.PulseAll(StateLock);
         }
@@ -1023,6 +1038,22 @@ public sealed unsafe class PipeWireAudioBackend : IAudioBackend
         return node.MediaClass == "Audio/Sink" && node.Name != null && node.Name != SinkNodeName;
     }
 
+    private PwNode? FindInputDevice(string? nodeName)
+    {
+        if (string.IsNullOrWhiteSpace(nodeName))
+            return null;
+
+        lock (StateLock)
+        {
+            return Nodes.Values.FirstOrDefault(node => node.Name == nodeName && IsInputDevice(node));
+        }
+    }
+
+    private static bool IsInputDevice(PwNode node)
+    {
+        return node.MediaClass is "Audio/Source" or "Audio/Source/Virtual" && node.Name != null;
+    }
+
     private void ScheduleDevicesChanged()
     {
         // PipeWire announces objects one at a time, so coalesce bursts into a single notification
@@ -1163,7 +1194,7 @@ public sealed unsafe class PipeWireAudioBackend : IAudioBackend
                 Monitor.PulseAll(StateLock);
             }
 
-            if (IsOutputDevice(node))
+            if (IsOutputDevice(node) || IsInputDevice(node))
                 ScheduleDevicesChanged();
         }
         else if (type == TypeMetadata && Metadata == 0)
@@ -1209,7 +1240,7 @@ public sealed unsafe class PipeWireAudioBackend : IAudioBackend
             }
         }
 
-        if (IsOutputDevice(node))
+        if (IsOutputDevice(node) || IsInputDevice(node))
             ScheduleDevicesChanged();
 
         if (interruptsRouting)
@@ -1234,7 +1265,12 @@ public sealed unsafe class PipeWireAudioBackend : IAudioBackend
             if (key == null)
             {
                 DefaultSinkName = null;
+                DefaultSourceName = null;
                 ConfiguredDefaultSink = null;
+            }
+            else if (key == DefaultSourceKey)
+            {
+                DefaultSourceName = ParseNodeName(value);
             }
             else if (key == ConfiguredDefaultSinkKey)
             {

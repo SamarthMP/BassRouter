@@ -12,7 +12,18 @@ Simple Windows and Linux utility to route audio between headphones and a subwoof
 ## Features
 
 - Adjust latency so that the headphones and speaker are perfectly synced up
+- Detect that latency automatically with a microphone
 - Adjust the low pass frequency to the range supported by your subwoofer
+
+## Detecting latency
+
+Press **Detect Latency**, pick a microphone and press start. BassRouter plays a few sweeps on your headphones and subwoofer (one at a time) and listens for them, then sets the artificial latency on whichever one plays first so they line up.
+
+- Put the microphone where you sit. For headphones, hold an ear cup against it.
+- Pause any other audio and keep the room quiet.
+- Don't use the microphone built into a Bluetooth headset, using it switches the headset into a different mode with a different latency.
+
+It only measures the difference between the two outputs, so the microphone's own latency doesn't matter. It takes about 15 seconds and starts routing if it isn't running already.
 
 ## Requirements
 

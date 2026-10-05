@@ -51,6 +51,40 @@ public sealed class AudioDeviceManager : IDisposable
     }
 
     /// <summary>
+    /// Returns all currently active audio input devices.
+    /// </summary>
+    public List<MMDevice> GetInputDevices()
+    {
+        try
+        {
+            using var enumerator = new MMDeviceEnumerator();
+            return enumerator
+                .EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
+                .ToList();
+        }
+        catch (Exception)
+        {
+            return new List<MMDevice>();
+        }
+    }
+
+    /// <summary>
+    /// Gets the default audio capture endpoint for the system, or null if there is none.
+    /// </summary>
+    public MMDevice? GetDefaultCaptureDevice()
+    {
+        try
+        {
+            using var enumerator = new MMDeviceEnumerator();
+            return enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Gets the default audio render endpoint for the system.
     /// </summary>
     public MMDevice? GetDefaultRenderDevice()

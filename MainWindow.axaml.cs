@@ -73,6 +73,7 @@ public partial class MainWindow : Window
             TrackDragging(slider);
 
         ButtonStartStop.Click += OnStartStopClicked;
+        ButtonDetectLatency.Click += OnDetectLatencyClicked;
         ButtonMinimize.Click += OnMinimizeClicked;
         ButtonClose.Click += OnCloseClicked;
         TitleBar.PointerPressed += OnTitleBarPointerPressed;
@@ -212,6 +213,11 @@ public partial class MainWindow : Window
             StopEngine();
         else
             StartEngine();
+    }
+
+    private void OnDetectLatencyClicked(object? sender, RoutedEventArgs e)
+    {
+        _ = new LatencyDetectionWindow(Controller).ShowDialog(this);
     }
 
     private void OnMinimizeClicked(object? sender, RoutedEventArgs e)

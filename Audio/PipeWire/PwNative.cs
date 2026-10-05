@@ -92,6 +92,96 @@ internal static unsafe partial class PwNative
     [LibraryImport(Library)]
     public static partial nint pw_get_library_version();
 
+    [LibraryImport(Library, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial nint pw_stream_new(nint core, string name, nint props);
+
+    [LibraryImport(Library)]
+    public static partial void pw_stream_add_listener(nint stream, nint listener, nint events, nint data);
+
+    [LibraryImport(Library)]
+    public static partial int pw_stream_connect(nint stream, PwDirection direction, uint targetId, PwStreamFlags flags, nint* parameters, uint parameterCount);
+
+    [LibraryImport(Library)]
+    public static partial void pw_stream_destroy(nint stream);
+
+    [LibraryImport(Library)]
+    public static partial nint pw_stream_dequeue_buffer(nint stream);
+
+    [LibraryImport(Library)]
+    public static partial int pw_stream_queue_buffer(nint stream, nint buffer);
+
+    #endregion
+
+    #region Streams
+
+    public enum PwDirection
+    {
+        Input = 0,
+        Output = 1,
+    }
+
+    [Flags]
+    public enum PwStreamFlags : uint
+    {
+        Autoconnect = 1 << 0,
+        MapBuffers = 1 << 2,
+        DontReconnect = 1 << 7,
+    }
+
+    public enum PwStreamState
+    {
+        Error = -1,
+        Unconnected = 0,
+        Connecting = 1,
+        Paused = 2,
+        Streaming = 3,
+    }
+
+    public const uint VersionStreamEvents = 2;
+
+    // struct pw_buffer (only the fields used here)
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PwBuffer
+    {
+        public nint Buffer;
+        public nint UserData;
+        public ulong Size;
+        public ulong Requested;
+    }
+
+    // struct spa_buffer
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SpaBuffer
+    {
+        public uint MetaCount;
+        public uint DataCount;
+        public nint Metas;
+        public nint Datas;
+    }
+
+    // struct spa_data
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SpaData
+    {
+        public uint Type;
+        public uint Flags;
+        public long Fd;
+        public uint MapOffset;
+        public uint MaxSize;
+        public nint Data;
+        public nint Chunk;
+    }
+
+    // struct spa_chunk
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SpaChunk
+    {
+        public uint Offset;
+        public uint Size;
+        public int Stride;
+        public int Flags;
+    }
+
     #endregion
 
     #region Interface method tables
@@ -391,6 +481,93 @@ internal static class PwPropsParams
         }
 
         return pod.ToArray();
+    }
+
+    private static void Pad(BinaryWriter writer)
+    {
+        while (writer.BaseStream.Position % 8 != 0)
+            writer.Write((byte)0);
+    }
+}
+
+/// <summary>
+/// Builds the SPA POD describing the 32-bit float audio format a stream uses:
+/// <c>Object(Format, EnumFormat) { mediaType = audio, mediaSubtype = raw, format = F32, rate, channels, position }</c>
+/// </summary>
+internal static class PwAudioFormatParams
+{
+    private const uint SpaTypeId = 3;
+    private const uint SpaTypeInt = 4;
+    private const uint SpaTypeArray = 13;
+    private const uint SpaTypeObject = 15;
+    private const uint SpaTypeObjectFormat = 0x40003;
+    private const uint SpaParamEnumFormat = 3;
+
+    private const uint SpaFormatMediaType = 1;
+    private const uint SpaFormatMediaSubtype = 2;
+    private const uint SpaFormatAudioFormat = 0x10001;
+    private const uint SpaFormatAudioRate = 0x10003;
+    private const uint SpaFormatAudioChannels = 0x10004;
+    private const uint SpaFormatAudioPosition = 0x10005;
+
+    private const uint SpaMediaTypeAudio = 1;
+    private const uint SpaMediaSubtypeRaw = 1;
+    private const uint SpaAudioFormatF32LE = 0x11b;
+
+    public const uint SpaAudioChannelMono = 2;
+    public const uint SpaAudioChannelFL = 3;
+    public const uint SpaAudioChannelFR = 4;
+
+    public static byte[] Build(int sampleRate, uint[] positions)
+    {
+        using var body = new MemoryStream();
+        using (var writer = new BinaryWriter(body, Encoding.UTF8, leaveOpen: true))
+        {
+            WriteProperty(writer, SpaFormatMediaType, SpaTypeId, SpaMediaTypeAudio);
+            WriteProperty(writer, SpaFormatMediaSubtype, SpaTypeId, SpaMediaSubtypeRaw);
+            WriteProperty(writer, SpaFormatAudioFormat, SpaTypeId, SpaAudioFormatF32LE);
+            WriteProperty(writer, SpaFormatAudioRate, SpaTypeInt, (uint)sampleRate);
+            WriteProperty(writer, SpaFormatAudioChannels, SpaTypeInt, (uint)positions.Length);
+
+            // Array of Ids: the child POD header followed by the packed values
+            writer.Write(SpaFormatAudioPosition);
+            writer.Write(0u);
+            writer.Write((uint)(8 + positions.Length * sizeof(uint)));
+            writer.Write(SpaTypeArray);
+            writer.Write((uint)sizeof(uint));
+            writer.Write(SpaTypeId);
+            foreach (uint position in positions)
+                writer.Write(position);
+            Pad(writer);
+        }
+
+        byte[] properties = body.ToArray();
+
+        using var pod = new MemoryStream();
+        using (var writer = new BinaryWriter(pod, Encoding.UTF8, leaveOpen: true))
+        {
+            // Object header + body (object type, param id)
+            writer.Write((uint)(8 + properties.Length));
+            writer.Write(SpaTypeObject);
+            writer.Write(SpaTypeObjectFormat);
+            writer.Write(SpaParamEnumFormat);
+            writer.Write(properties);
+        }
+
+        return pod.ToArray();
+    }
+
+    /// <summary>
+    /// A property (key, flags) whose value is a single Id or Int.
+    /// </summary>
+    private static void WriteProperty(BinaryWriter writer, uint key, uint type, uint value)
+    {
+        writer.Write(key);
+        writer.Write(0u);
+        writer.Write((uint)sizeof(uint));
+        writer.Write(type);
+        writer.Write(value);
+        Pad(writer);
     }
 
     private static void Pad(BinaryWriter writer)
